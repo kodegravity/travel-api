@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: travel-companion-api
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      # Only the health endpoint is exposed over HTTP; all other actuator endpoints stay disabled.
+      exposure:
+        include: health
+  endpoint:
+    health:
+      # Keep the response minimal ({"status":"UP"}); do not leak component details.
+      show-details: never

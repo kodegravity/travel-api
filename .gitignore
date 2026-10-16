@@ -1,0 +1,27 @@
+# Build output
+target/
+
+# Maven wrapper binaries (wrapper scripts and properties are kept)
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+application-local.yml
+application-secrets.yml
+
+# Logs and OS files
+*.log
+.DS_Store
