@@ -45,6 +45,9 @@ recommendation:
   max-recommendations: ${RECOMMENDATION_MAX_RESULTS:3}
 
 travel:
+  cors:
+    # Comma-separated browser origins allowed to call /api/v1/**. No wildcards.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   ai:
     # Off by default. Enable with TRAVEL_AI_ENABLED=true plus SPRING_AI_MODEL_CHAT=openai and OPENAI_API_KEY.
     enabled: ${TRAVEL_AI_ENABLED:false}
