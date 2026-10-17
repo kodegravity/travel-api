@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: recommendation-service
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${TRAVEL_AI_MODEL:gpt-4o-mini}
+    model:
+      chat: ${SPRING_AI_MODEL_CHAT:none}
+      embedding: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+
+places:
+  discovery:
+    base-url: ${PLACES_DISCOVERY_BASE_URL:http://localhost:8082}
+    connect-timeout: 2s
+    read-timeout: 8s
+
+recommendation:
+  search-radius-km: ${RECOMMENDATION_SEARCH_RADIUS_KM:5}
+  walking-speed-kmh: ${RECOMMENDATION_WALKING_SPEED_KMH:4.5}
+  max-recommendations: ${RECOMMENDATION_MAX_RESULTS:3}
+
+travel:
+  ai:
+    enabled: ${TRAVEL_AI_ENABLED:false}
+    model: ${TRAVEL_AI_MODEL:gpt-4o-mini}
+    max-candidates: ${TRAVEL_AI_MAX_CANDIDATES:10}
+    max-recommendations: ${TRAVEL_AI_MAX_RECOMMENDATIONS:3}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: false

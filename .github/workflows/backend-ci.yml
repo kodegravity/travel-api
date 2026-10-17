@@ -15,11 +15,26 @@ concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Each microservice is an independent Maven project with its own Dockerfile and image.
+# service: directory under services/; port: container and smoke-test port; ecr_repository: ECR repo for master pushes.
 jobs:
   build-and-test:
-    name: Build and test
+    name: Build and test (${{ matrix.service }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: places-discovery-service
+            port: 8082
+            ecr_repository: ai-travel-companion-places-discovery
+          - service: recommendation-service
+            port: 8081
+            ecr_repository: ai-travel-companion-recommendation
+          - service: travel-session-service
+            port: 8080
+            ecr_repository: ai-travel-companion-travel-session
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -32,15 +47,19 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+          cache-dependency-path: services/${{ matrix.service }}/pom.xml
 
       - name: Make Maven Wrapper executable
+        working-directory: services/${{ matrix.service }}
         run: chmod +x ./mvnw
 
       - name: Build and test
+        working-directory: services/${{ matrix.service }}
         run: ./mvnw -B -ntp clean verify
 
       - name: Summarize test results
         if: always()
+        working-directory: services/${{ matrix.service }}
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import glob
@@ -65,18 +84,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: surefire-test-reports
-          path: target/surefire-reports/
+          name: surefire-test-reports-${{ matrix.service }}
+          path: services/${{ matrix.service }}/target/surefire-reports/
           if-no-files-found: warn
           retention-days: 14
 
   docker-build:
-    name: Docker build and scan
+    name: Docker build and scan (${{ matrix.service }})
     needs: build-and-test
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: places-discovery-service
+            port: 8082
+          - service: recommendation-service
+            port: 8081
+          - service: travel-session-service
+            port: 8080
     env:
-      IMAGE: ai-travel-companion-api:${{ github.sha }}
+      IMAGE: ${{ matrix.service }}:${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -90,15 +119,15 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: services/${{ matrix.service }}
+          file: services/${{ matrix.service }}/Dockerfile
           push: false
           load: true
           tags: ${{ env.IMAGE }}
           build-args: |
             VCS_REF=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       - name: Verify image runs as non-root
         run: |
@@ -107,10 +136,12 @@ jobs:
           test "$user" = "10001:10001"
 
       - name: Smoke test container health
+        env:
+          PORT: ${{ matrix.port }}
         run: |
-          docker run -d --name smoke -p 8080:8080 "$IMAGE"
+          docker run -d --name smoke -p "$PORT:$PORT" "$IMAGE"
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '"status":"UP"'; then
+            if curl -fsS "http://127.0.0.1:$PORT/actuator/health" | grep -q '"status":"UP"'; then
               echo "Health check passed on attempt $attempt"
               docker stop smoke
               exit 0
@@ -154,17 +185,27 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: scanned-image
+          name: scanned-image-${{ matrix.service }}
           path: ${{ runner.temp }}/image.tar.gz
           if-no-files-found: error
           retention-days: 1
 
   ecr-push:
-    name: Push image to ECR (master only)
+    name: Push image to ECR (${{ matrix.service }}, master only)
     needs: docker-build
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: places-discovery-service
+            ecr_repository: ai-travel-companion-places-discovery
+          - service: recommendation-service
+            ecr_repository: ai-travel-companion-recommendation
+          - service: travel-session-service
+            ecr_repository: ai-travel-companion-travel-session
     # id-token: write lets this job request a short-lived OIDC token. No AWS access keys are stored in GitHub.
     permissions:
       contents: read
@@ -172,12 +213,12 @@ jobs:
     env:
       AWS_REGION: us-east-2
       AWS_ROLE_ARN: arn:aws:iam::512383926725:role/ai-travel-companion-ecr-push
-      ECR_REPOSITORY: ai-travel-companion-api
+      ECR_REPOSITORY: ${{ matrix.ecr_repository }}
     steps:
       - name: Download scanned image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: scanned-image
+          name: scanned-image-${{ matrix.service }}
           path: ${{ runner.temp }}
 
       - name: Load scanned image
@@ -197,7 +238,7 @@ jobs:
       - name: Tag and push image by commit SHA
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          SOURCE_IMAGE: ai-travel-companion-api:${{ github.sha }}
+          SOURCE_IMAGE: ${{ matrix.service }}:${{ github.sha }}
         run: |
           target="$REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA"
           # Tags are immutable in ECR, so skip if this commit was already published (e.g. a re-run).

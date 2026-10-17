@@ -7,7 +7,7 @@ This repository currently contains only the initial application skeleton (Task 1
 ## Tech Stack
 
 - Java 21
-- Spring Boot 3.5.16
+- Spring Boot 4.0.8 (Spring Framework 7, Spring AI 2.0.1)
 - Maven (with Maven Wrapper)
 - Spring Web MVC, Spring Boot Validation, Spring Boot Actuator
 - JUnit 5 and Spring Boot Test

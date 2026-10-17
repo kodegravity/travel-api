@@ -1,0 +1,37 @@
+# Version control, IDE, and OS metadata
+.git
+.github
+.idea
+.vscode
+.settings
+.project
+.classpath
+*.iml
+*.ipr
+*.iws
+.DS_Store
+**/.DS_Store
+
+# Build output is produced inside the image build
+target
+
+# Secrets and local environment files must never enter the image
+.env
+.env.*
+*.pem
+*.key
+application-local.yml
+application-secrets.yml
+
+# Logs, editor temporary files, and frontend/tooling leftovers
+*.log
+logs
+*.swp
+*~
+node_modules
+
+# Not needed to build the JAR
+docs
+README.md
+Dockerfile
+.dockerignore

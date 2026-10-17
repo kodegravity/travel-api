@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: places-discovery-service
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
+
+server:
+  port: ${SERVER_PORT:8082}
+  shutdown: graceful
+
+attraction:
+  # "mock" (default, no credentials needed) or "google".
+  provider: ${ATTRACTION_PROVIDER:mock}
+
+google:
+  places:
+    # Required when attraction.provider=google. Supply via the environment; never commit a key.
+    api-key: ${GOOGLE_PLACES_API_KEY:}
+    base-url: https://places.googleapis.com
+    connect-timeout: 2s
+    read-timeout: 5s
+    max-result-count: 20
+    field-mask: places.id,places.displayName,places.location,places.types,places.googleMapsUri
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      # Boot 4 lists the liveness/readiness probe groups in the root response; this service has no k8s probes.
+      probes:
+        enabled: false

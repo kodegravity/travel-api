@@ -191,3 +191,10 @@ Chunk 2 (implemented): OIDC auth and ECR push. Remaining integration points:
 - Session state is in memory. A restart or redeploy loses active travel sessions.
 - The Docker `HEALTHCHECK` is only used by Docker, not ECS.
 - Trivy scans run against the image built in CI. The gate uses Trivy's vulnerability database, which may change between runs.
+
+## Dependency versions and CVE overrides
+
+- The backend runs on Spring Boot 4.0.8 (Spring Framework 7, Spring AI 2.0.1, Jackson 3 for `tools.jackson.*`). Test slices use `spring-boot-webmvc-test` and `spring-boot-resttestclient`.
+- `pom.xml` pins `tomcat.version=11.0.25`, `jackson-bom.version=3.1.7`, and `jackson-2-bom.version=2.21.7` to clear Trivy findings that Boot 4.0.8 still manages at older versions. Remove these overrides once Boot ships the fixed versions.
+- The runtime base image is pinned to `eclipse-temurin:21-jre-alpine-3.23` by digest. Its libexpat (2.8.5-r0) fixes CVE-2026-93990.
+- Last local Trivy scan of the image (`--severity CRITICAL,HIGH`): 0 findings.
