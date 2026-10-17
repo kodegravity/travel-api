@@ -4,10 +4,10 @@ on:
   pull_request:
     branches: [master]
   push:
-    branches: [master]
+    branches: [master, development]
   workflow_dispatch:
 
-# Read-only by default. Only the ecr-push job (master pushes) requests an OIDC token; no long-lived AWS keys are stored.
+# Read-only by default. Only the ecr-push job (master and development pushes) requests an OIDC token; no long-lived AWS keys are stored.
 permissions:
   contents: read
 
@@ -15,8 +15,9 @@ concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Pushes to master or development publish images to ECR.
 # Each microservice is an independent Maven project with its own Dockerfile and image.
-# service: directory under services/; port: container and smoke-test port; ecr_repository: ECR repo for master pushes.
+# service: directory under services/; port: container and smoke-test port; ecr_repository: ECR repo for master and development pushes.
 jobs:
   build-and-test:
     name: Build and test (${{ matrix.service }})
@@ -177,12 +178,12 @@ jobs:
           exit-code: '1'
 
       # Save the exact image that was scanned so the ECR job pushes the same bytes, not a rebuild.
-      - name: Save scanned image (master only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      - name: Save scanned image (master and development)
+        if: github.event_name == 'push' && contains(fromJSON('["refs/heads/master","refs/heads/development"]'), github.ref)
         run: docker save "$IMAGE" | gzip > "$RUNNER_TEMP/image.tar.gz"
 
-      - name: Upload scanned image (master only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      - name: Upload scanned image (master and development)
+        if: github.event_name == 'push' && contains(fromJSON('["refs/heads/master","refs/heads/development"]'), github.ref)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scanned-image-${{ matrix.service }}
@@ -191,9 +192,9 @@ jobs:
           retention-days: 1
 
   ecr-push:
-    name: Push image to ECR (${{ matrix.service }}, master only)
+    name: Push image to ECR (${{ matrix.service }}, master and development)
     needs: docker-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && contains(fromJSON('["refs/heads/master","refs/heads/development"]'), github.ref)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
