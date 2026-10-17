@@ -1,5 +1,6 @@
 package com.aitravel.recommendation.config;
 
+import com.aitravel.recommendation.logging.RequestIdForwardingInterceptor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
@@ -21,6 +22,7 @@ public class PlacesDiscoveryConfig {
                 .baseUrl(properties.baseUrl())
                 .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
                 .requestInterceptor(new BearerTokenForwardingInterceptor())
+                .requestInterceptor(new RequestIdForwardingInterceptor())
                 .build();
     }
 }

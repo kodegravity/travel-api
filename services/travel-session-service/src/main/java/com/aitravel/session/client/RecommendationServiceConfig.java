@@ -1,5 +1,6 @@
 package com.aitravel.session.client;
 
+import com.aitravel.session.logging.RequestIdForwardingInterceptor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
@@ -20,6 +21,7 @@ public class RecommendationServiceConfig {
                 .baseUrl(properties.baseUrl())
                 .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
                 .requestInterceptor(new BearerTokenForwardingInterceptor())
+                .requestInterceptor(new RequestIdForwardingInterceptor())
                 .build();
     }
 }

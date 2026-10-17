@@ -41,6 +41,14 @@
         {
           "name": "OKTA_AUDIENCE",
           "value": "<OKTA_AUDIENCE>"
+        },
+        {
+          "name": "LOGGING_STRUCTURED_FORMAT_CONSOLE",
+          "value": "ecs"
+        },
+        {
+          "name": "LOGGING_LEVEL_COM_AITRAVEL",
+          "value": "INFO"
         }
       ],
       "secrets": [
