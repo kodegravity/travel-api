@@ -44,6 +44,9 @@ These names are read from `src/main/resources/application.yml`. Nothing else is 
 | `TRAVEL_AI_ENABLED` | `false` | Recommendation service. Sends eligible candidates to OpenAI for selection and reasons |
 | `TRAVEL_AI_MODEL` | `gpt-4o-mini` | Recommendation service. OpenAI chat model |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins for `/api/v1/**` |
+| `OKTA_ISSUER` | none (required) | Travel session service. Okta issuer URI, e.g. `https://<domain>/oauth2/default`. The service fails at startup if blank |
+| `OKTA_AUDIENCE` | none (required) | Travel session service. Audience the access token must carry, e.g. `api://travel-session` |
+| `TRAVEL_REQUIRED_SCOPE` | empty | Optional. When set, `/api/v1/**` requires this OAuth scope (403 without it) |
 | `RECOMMENDATION_SEARCH_RADIUS_KM` | `5` | Search radius |
 | `RECOMMENDATION_WALKING_SPEED_KMH` | `4.5` | Walking speed |
 | `RECOMMENDATION_MAX_RESULTS` | `3` | Max recommendations |

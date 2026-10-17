@@ -140,7 +140,10 @@ jobs:
         env:
           PORT: ${{ matrix.port }}
         run: |
-          docker run -d --name smoke -p "$PORT:$PORT" "$IMAGE"
+          docker run -d --name smoke -p "$PORT:$PORT" \
+            -e OKTA_ISSUER=https://smoke.okta.invalid/oauth2/default \
+            -e OKTA_AUDIENCE=api://smoke-test \
+            "$IMAGE"
           for attempt in $(seq 1 30); do
             if curl -fsS "http://127.0.0.1:$PORT/actuator/health" | grep -q '"status":"UP"'; then
               echo "Health check passed on attempt $attempt"

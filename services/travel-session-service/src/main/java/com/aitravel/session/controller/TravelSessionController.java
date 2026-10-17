@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,8 +32,9 @@ public class TravelSessionController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CreateTravelSessionResponse> create(
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody CreateTravelSessionRequest request) {
-        CreateTravelSessionResponse response = travelSessionService.create(request);
+        CreateTravelSessionResponse response = travelSessionService.create(request, jwt.getSubject());
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{sessionId}")
                 .buildAndExpand(response.sessionId())
@@ -41,14 +44,15 @@ public class TravelSessionController {
 
     @PostMapping(value = "/{sessionId}/recommendations", consumes = MediaType.APPLICATION_JSON_VALUE)
     public TravelSessionRecommendationResponse refresh(
+            @AuthenticationPrincipal Jwt jwt,
             @PathVariable UUID sessionId,
             @Valid @RequestBody TravelSessionRefreshRequest request) {
-        return travelSessionService.refresh(sessionId, request.location());
+        return travelSessionService.refresh(sessionId, jwt.getSubject(), request.location());
     }
 
     @DeleteMapping("/{sessionId}")
-    public ResponseEntity<Void> stop(@PathVariable UUID sessionId) {
-        travelSessionService.stop(sessionId);
+    public ResponseEntity<Void> stop(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID sessionId) {
+        travelSessionService.stop(sessionId, jwt.getSubject());
         return ResponseEntity.noContent().build();
     }
 }

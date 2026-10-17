@@ -21,6 +21,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +32,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class TravelSessionService {
+
+    private static final Logger log = LoggerFactory.getLogger(TravelSessionService.class);
 
     private final TravelSessionRepository repository;
     private final RecommendationService recommendationService;
@@ -46,10 +50,11 @@ public class TravelSessionService {
         this.clock = clock;
     }
 
-    public CreateTravelSessionResponse create(CreateTravelSessionRequest request) {
+    public CreateTravelSessionResponse create(CreateTravelSessionRequest request, String ownerSubject) {
         Instant now = clock.instant();
         TravelSession session = new TravelSession(
                 UUID.randomUUID(),
+                ownerSubject,
                 request.interests(),
                 request.maxBudget(),
                 request.currencyCode(),
@@ -61,12 +66,13 @@ public class TravelSessionService {
         if (!repository.addIfCapacity(session, properties.maxActiveSessions(), now, retention())) {
             throw new TravelSessionException(Reason.CAPACITY_REACHED);
         }
+        log.info("Travel session created sessionId={} owner={}", session.sessionId(), ownerSubject);
         return new CreateTravelSessionResponse(session.sessionId(), TravelSessionStatus.ACTIVE, session.expiresAt());
     }
 
-    public TravelSessionRecommendationResponse refresh(UUID sessionId, LocationRequest locationRequest) {
+    public TravelSessionRecommendationResponse refresh(UUID sessionId, String ownerSubject, LocationRequest locationRequest) {
         Instant now = clock.instant();
-        TravelSession session = requireActive(sessionId, now);
+        TravelSession session = requireActive(sessionId, ownerSubject, now);
 
         if (!session.tryBeginRefresh()) {
             throw new TravelSessionException(Reason.REFRESH_IN_PROGRESS);
@@ -108,14 +114,15 @@ public class TravelSessionService {
     }
 
     /** Stopping is idempotent. Repeat calls on a stopped session succeed. Expired sessions cannot be stopped. */
-    public void stop(UUID sessionId) {
+    public void stop(UUID sessionId, String ownerSubject) {
         Instant now = clock.instant();
-        TravelSession session = find(sessionId);
+        TravelSession session = find(sessionId, ownerSubject);
         session.expireIfDue(now);
         if (session.status() == TravelSessionStatus.EXPIRED) {
             throw new TravelSessionException(Reason.EXPIRED);
         }
         session.stop();
+        log.info("Travel session stopped sessionId={} owner={}", sessionId, ownerSubject);
     }
 
     @Scheduled(fixedDelayString = "${travel.session.cleanup-interval-ms:60000}")
@@ -143,8 +150,8 @@ public class TravelSessionService {
         return movedEnough && cooledDown;
     }
 
-    private TravelSession requireActive(UUID sessionId, Instant now) {
-        TravelSession session = find(sessionId);
+    private TravelSession requireActive(UUID sessionId, String ownerSubject, Instant now) {
+        TravelSession session = find(sessionId, ownerSubject);
         session.expireIfDue(now);
         if (session.status() != TravelSessionStatus.ACTIVE) {
             throw stateException(session, now);
@@ -152,8 +159,13 @@ public class TravelSessionService {
         return session;
     }
 
-    private TravelSession find(UUID sessionId) {
+    /**
+     * Looks up a session the caller owns. Another user's session gets the same NOT_FOUND as a missing one,
+     * so session IDs cannot be probed.
+     */
+    private TravelSession find(UUID sessionId, String ownerSubject) {
         return repository.findById(sessionId)
+                .filter(session -> session.ownerSubject().equals(ownerSubject))
                 .orElseThrow(() -> new TravelSessionException(Reason.NOT_FOUND));
     }
 

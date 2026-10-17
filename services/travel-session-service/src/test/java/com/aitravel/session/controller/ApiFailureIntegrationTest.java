@@ -1,5 +1,9 @@
 package com.aitravel.session.controller;
 
+import com.aitravel.session.config.JwtTestSupport;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
+
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,6 +30,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.RequestBuilder;
 
+@TestPropertySource(properties = {JwtTestSupport.ISSUER_PROPERTY, JwtTestSupport.AUDIENCE_PROPERTY})
+@Import(JwtTestSupport.DefaultJwtMockMvcConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class ApiFailureIntegrationTest {

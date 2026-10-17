@@ -1,5 +1,9 @@
 package com.aitravel.session.controller;
 
+import com.aitravel.session.config.JwtTestSupport;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +14,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+@TestPropertySource(properties = {JwtTestSupport.ISSUER_PROPERTY, JwtTestSupport.AUDIENCE_PROPERTY})
+@Import(JwtTestSupport.DefaultJwtMockMvcConfig.class)
 @SpringBootTest(properties = "travel.session.max-active-sessions=1")
 @AutoConfigureMockMvc
 class TravelSessionCapacityIntegrationTest {

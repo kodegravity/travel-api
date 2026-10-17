@@ -29,7 +29,7 @@ class InMemoryTravelSessionRepositoryTest {
     private final InMemoryTravelSessionRepository repository = new InMemoryTravelSessionRepository();
 
     private TravelSession newSession() {
-        return new TravelSession(UUID.randomUUID(), Set.of(Interest.HISTORY), BigDecimal.TEN, "EUR", 120,
+        return new TravelSession(UUID.randomUUID(), "user-owner", Set.of(Interest.HISTORY), BigDecimal.TEN, "EUR", 120,
                 clock.instant(), INACTIVITY, MAX_LIFETIME);
     }
 

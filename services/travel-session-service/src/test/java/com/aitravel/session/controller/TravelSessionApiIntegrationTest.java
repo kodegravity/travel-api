@@ -1,5 +1,9 @@
 package com.aitravel.session.controller;
 
+import com.aitravel.session.config.JwtTestSupport;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -34,6 +38,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+@TestPropertySource(properties = {JwtTestSupport.ISSUER_PROPERTY, JwtTestSupport.AUDIENCE_PROPERTY})
+@Import(JwtTestSupport.DefaultJwtMockMvcConfig.class)
 @SpringBootTest(properties = "travel.session.max-active-sessions=50")
 @AutoConfigureMockMvc
 class TravelSessionApiIntegrationTest {

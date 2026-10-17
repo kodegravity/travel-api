@@ -45,6 +45,8 @@ import org.junit.jupiter.api.Test;
 class TravelSessionServiceTest {
 
     // Roughly 300 m and 100 m of latitude change respectively.
+    private static final String OWNER = "user-owner";
+    private static final String OTHER_OWNER = "user-other";
     private static final BigDecimal LAT = new BigDecimal("41.9028");
     private static final BigDecimal LON = new BigDecimal("12.4964");
     private static final BigDecimal LAT_300M = new BigDecimal("41.9055");
@@ -82,7 +84,7 @@ class TravelSessionServiceTest {
     private UUID createSession() {
         CreateTravelSessionRequest request = new CreateTravelSessionRequest(
                 Set.of(Interest.HISTORY, Interest.ART), new BigDecimal("50"), "EUR", 180);
-        return service.create(request).sessionId();
+        return service.create(request, OWNER).sessionId();
     }
 
     private static LocationRequest at(BigDecimal latitude) {
@@ -110,7 +112,7 @@ class TravelSessionServiceTest {
     @Test
     void createReturnsActiveSessionExpiringAfterInactivityTimeout() {
         CreateTravelSessionResponse response = service.create(new CreateTravelSessionRequest(
-                Set.of(Interest.HISTORY), BigDecimal.TEN, "EUR", 120));
+                Set.of(Interest.HISTORY), BigDecimal.TEN, "EUR", 120), OWNER);
 
         assertThat(response.sessionId()).isNotNull();
         assertThat(response.status()).isEqualTo(TravelSessionStatus.ACTIVE);
@@ -122,7 +124,7 @@ class TravelSessionServiceTest {
         UUID id = createSession();
         providerReturns(places("a", "b", "c"));
 
-        TravelSessionRecommendationResponse response = service.refresh(id, at(LAT));
+        TravelSessionRecommendationResponse response = service.refresh(id, OWNER, at(LAT));
 
         assertThat(response.refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
         assertThat(response.recommendations()).extracting(RecommendationDto::placeId).containsExactly("a", "b", "c");
@@ -134,10 +136,10 @@ class TravelSessionServiceTest {
     void movementBelowMinimumReturnsUnchangedWithoutProviderCall() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         clock.advance(Duration.ofMinutes(10));
-        TravelSessionRecommendationResponse response = service.refresh(id, at(LAT_100M));
+        TravelSessionRecommendationResponse response = service.refresh(id, OWNER, at(LAT_100M));
 
         assertThat(response.refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
         assertThat(response.recommendations()).isEmpty();
@@ -148,10 +150,10 @@ class TravelSessionServiceTest {
     void cooldownBelowFiveMinutesReturnsUnchangedWithoutProviderCall() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         clock.advance(Duration.ofMinutes(4));
-        TravelSessionRecommendationResponse response = service.refresh(id, at(LAT_300M));
+        TravelSessionRecommendationResponse response = service.refresh(id, OWNER, at(LAT_300M));
 
         assertThat(response.refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
         verify(recommendationService, times(1)).recommend(any(RecommendationRequest.class), anySet());
@@ -161,11 +163,11 @@ class TravelSessionServiceTest {
     void sufficientMovementAfterCooldownTriggersRefresh() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         clock.advance(Duration.ofMinutes(6));
         providerReturns(places("b"));
-        TravelSessionRecommendationResponse response = service.refresh(id, at(LAT_300M));
+        TravelSessionRecommendationResponse response = service.refresh(id, OWNER, at(LAT_300M));
 
         assertThat(response.refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
         assertThat(response.recommendations()).extracting(RecommendationDto::placeId).containsExactly("b");
@@ -176,27 +178,27 @@ class TravelSessionServiceTest {
     void skippedRefreshDoesNotResetMovementBaseline() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         // 100 m from the baseline: skipped. The baseline must stay at LAT.
         clock.advance(Duration.ofMinutes(6));
-        assertThat(service.refresh(id, at(LAT_100M)).refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
+        assertThat(service.refresh(id, OWNER, at(LAT_100M)).refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
 
         // 300 m from the original baseline (still satisfied by the cooldown): refreshes.
         clock.advance(Duration.ofMinutes(1));
         providerReturns(places("b"));
-        assertThat(service.refresh(id, at(LAT_300M)).refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
+        assertThat(service.refresh(id, OWNER, at(LAT_300M)).refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
     }
 
     @Test
     void previouslyRecommendedPlacesAreExcludedFromNextRefresh() {
         UUID id = createSession();
         providerReturns(places("a", "b", "c"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         clock.advance(Duration.ofMinutes(6));
         providerReturns(places("d"));
-        TravelSessionRecommendationResponse response = service.refresh(id, at(LAT_300M));
+        TravelSessionRecommendationResponse response = service.refresh(id, OWNER, at(LAT_300M));
 
         assertThat(response.recommendations()).extracting(RecommendationDto::placeId).containsExactly("d");
         verify(recommendationService).recommend(any(RecommendationRequest.class),
@@ -207,11 +209,11 @@ class TravelSessionServiceTest {
     void noUnseenEligibleResultsReturnsNoNewResults() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         clock.advance(Duration.ofMinutes(6));
         providerReturns(places());
-        TravelSessionRecommendationResponse response = service.refresh(id, at(LAT_300M));
+        TravelSessionRecommendationResponse response = service.refresh(id, OWNER, at(LAT_300M));
 
         assertThat(response.refreshStatus()).isEqualTo(RefreshStatus.NO_NEW_RESULTS);
         assertThat(response.recommendations()).isEmpty();
@@ -224,19 +226,19 @@ class TravelSessionServiceTest {
                 .thenThrow(new AttractionProviderException("upstream down", null))
                 .thenReturn(places("a"));
 
-        assertThatThrownBy(() -> service.refresh(id, at(LAT)))
+        assertThatThrownBy(() -> service.refresh(id, OWNER, at(LAT)))
                 .isInstanceOf(AttractionProviderException.class);
 
         // The failed attempt left no baseline, so the retry is still a first refresh.
-        TravelSessionRecommendationResponse retry = service.refresh(id, at(LAT));
+        TravelSessionRecommendationResponse retry = service.refresh(id, OWNER, at(LAT));
         assertThat(retry.refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
         verify(recommendationService, times(2)).recommend(any(RecommendationRequest.class), anySet());
     }
 
     @Test
     void unknownSessionIsNotFound() {
-        assertReason(() -> service.refresh(UUID.randomUUID(), at(LAT)), Reason.NOT_FOUND);
-        assertReason(() -> service.stop(UUID.randomUUID()), Reason.NOT_FOUND);
+        assertReason(() -> service.refresh(UUID.randomUUID(), OWNER, at(LAT)), Reason.NOT_FOUND);
+        assertReason(() -> service.stop(UUID.randomUUID(), OWNER), Reason.NOT_FOUND);
     }
 
     @Test
@@ -244,7 +246,7 @@ class TravelSessionServiceTest {
         UUID id = createSession();
         clock.advance(Duration.ofMinutes(30));
 
-        assertReason(() -> service.refresh(id, at(LAT)), Reason.EXPIRED);
+        assertReason(() -> service.refresh(id, OWNER, at(LAT)), Reason.EXPIRED);
         verifyNoInteractions(recommendationService);
     }
 
@@ -252,56 +254,56 @@ class TravelSessionServiceTest {
     void validActivityExtendsInactivityExpiry() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         clock.advance(Duration.ofMinutes(20));
-        assertThat(service.refresh(id, at(LAT)).refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
+        assertThat(service.refresh(id, OWNER, at(LAT)).refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
 
         // 40 minutes since creation, but only 20 since the last activity: still active.
         clock.advance(Duration.ofMinutes(20));
-        assertThat(service.refresh(id, at(LAT)).refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
+        assertThat(service.refresh(id, OWNER, at(LAT)).refreshStatus()).isEqualTo(RefreshStatus.UNCHANGED);
     }
 
     @Test
     void absoluteLifetimeCapsContinuousActivity() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
         for (int i = 0; i < 5; i++) {
             clock.advance(Duration.ofMinutes(20));
-            service.refresh(id, at(LAT));
+            service.refresh(id, OWNER, at(LAT));
         }
         clock.advance(Duration.ofMinutes(20));
 
         // 120 minutes since creation: the absolute lifetime has ended despite recent activity.
-        assertReason(() -> service.refresh(id, at(LAT)), Reason.EXPIRED);
+        assertReason(() -> service.refresh(id, OWNER, at(LAT)), Reason.EXPIRED);
     }
 
     @Test
     void stopClearsStateAndBlocksRefreshes() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
 
-        service.stop(id);
+        service.stop(id, OWNER);
 
-        assertReason(() -> service.refresh(id, at(LAT_300M)), Reason.STOPPED);
+        assertReason(() -> service.refresh(id, OWNER, at(LAT_300M)), Reason.STOPPED);
         verify(recommendationService, times(1)).recommend(any(RecommendationRequest.class), anySet());
     }
 
     @Test
     void repeatedStopSucceeds() {
         UUID id = createSession();
-        service.stop(id);
-        service.stop(id);
+        service.stop(id, OWNER);
+        service.stop(id, OWNER);
     }
 
     @Test
     void stoppingExpiredSessionReportsExpired() {
         UUID id = createSession();
         clock.advance(Duration.ofMinutes(31));
-        assertReason(() -> service.stop(id), Reason.EXPIRED);
+        assertReason(() -> service.stop(id, OWNER), Reason.EXPIRED);
     }
 
     @Test
@@ -316,10 +318,10 @@ class TravelSessionServiceTest {
         });
 
         executor = Executors.newSingleThreadExecutor();
-        Future<TravelSessionRecommendationResponse> inFlight = executor.submit(() -> service.refresh(id, at(LAT)));
+        Future<TravelSessionRecommendationResponse> inFlight = executor.submit(() -> service.refresh(id, OWNER, at(LAT)));
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
-        service.stop(id);
+        service.stop(id, OWNER);
         release.countDown();
 
         assertThatThrownBy(inFlight::get).hasCauseInstanceOf(TravelSessionException.class);
@@ -337,10 +339,10 @@ class TravelSessionServiceTest {
         });
 
         executor = Executors.newSingleThreadExecutor();
-        Future<TravelSessionRecommendationResponse> first = executor.submit(() -> service.refresh(id, at(LAT)));
+        Future<TravelSessionRecommendationResponse> first = executor.submit(() -> service.refresh(id, OWNER, at(LAT)));
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
-        assertReason(() -> service.refresh(id, at(LAT)), Reason.REFRESH_IN_PROGRESS);
+        assertReason(() -> service.refresh(id, OWNER, at(LAT)), Reason.REFRESH_IN_PROGRESS);
 
         release.countDown();
         assertThat(first.get(5, TimeUnit.SECONDS).refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
@@ -362,10 +364,10 @@ class TravelSessionServiceTest {
         });
 
         executor = Executors.newFixedThreadPool(2);
-        Future<TravelSessionRecommendationResponse> blocked = executor.submit(() -> service.refresh(slow, at(LAT)));
+        Future<TravelSessionRecommendationResponse> blocked = executor.submit(() -> service.refresh(slow, OWNER, at(LAT)));
         assertThat(slowEntered.await(5, TimeUnit.SECONDS)).isTrue();
 
-        TravelSessionRecommendationResponse other = service.refresh(fast, at(LAT));
+        TravelSessionRecommendationResponse other = service.refresh(fast, OWNER, at(LAT));
         assertThat(other.refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
 
         releaseSlow.countDown();
@@ -376,10 +378,10 @@ class TravelSessionServiceTest {
     void sessionStateIsClearedAfterStop() {
         UUID id = createSession();
         providerReturns(places("a"));
-        service.refresh(id, at(LAT));
+        service.refresh(id, OWNER, at(LAT));
         TravelSession session = fetch(id);
 
-        service.stop(id);
+        service.stop(id, OWNER);
 
         TravelSession.Snapshot snapshot = session.snapshot();
         assertThat(snapshot.interests()).isEmpty();
@@ -395,7 +397,7 @@ class TravelSessionServiceTest {
 
         assertReason(this::createSession, Reason.CAPACITY_REACHED);
 
-        service.stop(first);
+        service.stop(first, OWNER);
         assertThat(createSession()).isNotNull();
     }
 
@@ -403,19 +405,29 @@ class TravelSessionServiceTest {
     void purgeRemovesSessionsAfterRetentionWindow() {
         TravelSessionService local = new TravelSessionService(
                 new InMemoryTravelSessionRepository(), recommendationService, properties, clock);
-        UUID id = local.create(new CreateTravelSessionRequest(Set.of(Interest.ART), BigDecimal.ONE, "EUR", 60))
+        UUID id = local.create(new CreateTravelSessionRequest(Set.of(Interest.ART), BigDecimal.ONE, "EUR", 60), OWNER)
                 .sessionId();
 
         clock.advance(Duration.ofMinutes(30));
         local.purgeExpiredSessions();
-        assertReason(() -> local.stop(id), Reason.EXPIRED);
+        assertReason(() -> local.stop(id, OWNER), Reason.EXPIRED);
 
         clock.advance(Duration.ofMinutes(30));
         local.purgeExpiredSessions();
-        assertReason(() -> local.stop(id), Reason.NOT_FOUND);
+        assertReason(() -> local.stop(id, OWNER), Reason.NOT_FOUND);
     }
 
     private TravelSession fetch(UUID id) {
         return repository.findById(id).orElseThrow();
+    }
+
+    @Test
+    void otherOwnersCannotRefreshOrStopSession() {
+        UUID id = createSession();
+        providerReturns(places("a", "b", "c"));
+
+        assertReason(() -> service.refresh(id, OTHER_OWNER, at(LAT)), Reason.NOT_FOUND);
+        assertReason(() -> service.stop(id, OTHER_OWNER), Reason.NOT_FOUND);
+        assertThat(service.refresh(id, OWNER, at(LAT)).refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
     }
 }

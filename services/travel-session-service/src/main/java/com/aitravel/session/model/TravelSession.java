@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class TravelSession {
 
     private final UUID sessionId;
+    private final String ownerSubject;
     private final Instant createdAt;
     private final Duration inactivityTimeout;
     private final Instant hardExpiresAt;
@@ -37,9 +38,10 @@ public final class TravelSession {
     private Instant lastRecommendationTime;
     private final Set<String> recommendedPlaceIds = new HashSet<>();
 
-    public TravelSession(UUID sessionId, Set<Interest> interests, BigDecimal maxBudget, String currencyCode,
+    public TravelSession(UUID sessionId, String ownerSubject, Set<Interest> interests, BigDecimal maxBudget, String currencyCode,
                          Integer availableMinutes, Instant now, Duration inactivityTimeout, Duration maxLifetime) {
         this.sessionId = sessionId;
+        this.ownerSubject = ownerSubject;
         this.interests = Set.copyOf(interests);
         this.maxBudget = maxBudget;
         this.currencyCode = currencyCode;
@@ -53,6 +55,11 @@ public final class TravelSession {
 
     public UUID sessionId() {
         return sessionId;
+    }
+
+    /** The Okta {@code sub} of the user who created this session. */
+    public String ownerSubject() {
+        return ownerSubject;
     }
 
     public Instant createdAt() {

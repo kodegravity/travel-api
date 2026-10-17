@@ -1,5 +1,9 @@
 package com.aitravel.session.controller;
 
+import com.aitravel.session.config.JwtTestSupport;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasKey;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,6 +28,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+@TestPropertySource(properties = {JwtTestSupport.ISSUER_PROPERTY, JwtTestSupport.AUDIENCE_PROPERTY})
+@Import(JwtTestSupport.DefaultJwtMockMvcConfig.class)
 @WebMvcTest(RecommendationController.class)
 class RecommendationControllerTest {
 
