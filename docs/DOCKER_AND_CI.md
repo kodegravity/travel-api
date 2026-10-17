@@ -1,6 +1,6 @@
 # Docker and CI
 
-This document covers the production container image and the GitHub Actions backend CI pipeline. AWS ECR and ECS deployment are not part of this chunk.
+This document covers the production container image and the GitHub Actions backend CI pipeline. The CI pipeline pushes the scanned image to AWS ECR on master pushes. ECS deployment is not implemented yet.
 
 ## Prerequisites
 
@@ -134,9 +134,11 @@ Surefire reports are written to `target/surefire-reports/`.
 
 File: `.github/workflows/backend-ci.yml`
 
-**Triggers:** pull requests targeting `main`, pushes to `main`, and manual `workflow_dispatch`.
+**Triggers:** pull requests targeting `master`, pushes to `master`, and manual `workflow_dispatch`.
 
-**Permissions:** `contents: read` only. No AWS credentials, Docker Hub credentials, or other secrets are used. The image is never pushed.
+**Permissions:** `contents: read` at the top level. Only the `ecr-push` job adds `id-token: write`, to get a short-lived OIDC token. No AWS access keys or Docker Hub credentials are stored. Images are pushed to ECR only on `master` pushes, after the Trivy gate passes.
+
+**ECR job:** `ecr-push` runs after `docker-build` on `master` pushes only. It loads the scanned image artifact (the same bytes that were scanned), assumes the IAM role `ai-travel-companion-ecr-push` (region us-east-2) through OIDC, and pushes it to `512383926725.dkr.ecr.us-east-2.amazonaws.com/ai-travel-companion-api:<commit-sha>`. It skips the push if the tag already exists, because ECR tags are immutable. The role trusts only `repo:kodegravity/travel-api:ref:refs/heads/master` and can push only to this repository.
 
 **Job 1: `build-and-test`** (`ubuntu-24.04`)
 1. Checks out the repo without persisting credentials.
@@ -177,7 +179,7 @@ Planned pipeline after Chunk 1:
 Push → build-and-test → docker-build (+ Trivy gate) → Amazon ECR → ECS Fargate service → ALB (/actuator/health) → deployment verification
 ```
 
-Integration points for Chunk 2:
+Chunk 2 (implemented): OIDC auth and ECR push. Remaining integration points:
 - **Authentication:** GitHub Actions OIDC with an IAM role assumed through `aws-actions/configure-aws-credentials`. No long-lived AWS access keys.
 - **Registry:** push the scanned image to ECR. Tag with the commit SHA. Scan results are reviewed before the push.
 - **ECS task definition:** non-root `10001:10001`, port 8080, env variables as listed above, secrets from AWS Secrets Manager or SSM Parameter Store (not plain environment values).
