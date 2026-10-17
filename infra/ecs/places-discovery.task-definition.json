@@ -1,0 +1,65 @@
+{
+  "family": "ai-travel-companion-places-discovery",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "networkMode": "awsvpc",
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-travel-companion-ecs-execution",
+  "containerDefinitions": [
+    {
+      "name": "ai-travel-companion-places-discovery",
+      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-2.amazonaws.com/ai-travel-companion-places-discovery:<IMAGE_TAG>",
+      "essential": true,
+      "user": "10001:10001",
+      "portMappings": [
+        {
+          "name": "http",
+          "containerPort": 8082,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SERVER_PORT",
+          "value": "8082"
+        },
+        {
+          "name": "ATTRACTION_PROVIDER",
+          "value": "mock"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "GOOGLE_PLACES_API_KEY",
+          "valueFrom": "<SECRET_ARN_GOOGLE_PLACES_API_KEY>"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1:8082/actuator/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "stopTimeout": 30,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ai-travel-companion-places-discovery",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

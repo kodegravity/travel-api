@@ -1,0 +1,69 @@
+{
+  "family": "ai-travel-companion-recommendation",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "networkMode": "awsvpc",
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-travel-companion-ecs-execution",
+  "containerDefinitions": [
+    {
+      "name": "ai-travel-companion-recommendation",
+      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-2.amazonaws.com/ai-travel-companion-recommendation:<IMAGE_TAG>",
+      "essential": true,
+      "user": "10001:10001",
+      "portMappings": [
+        {
+          "name": "http",
+          "containerPort": 8081,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SERVER_PORT",
+          "value": "8081"
+        },
+        {
+          "name": "TRAVEL_AI_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "PLACES_DISCOVERY_BASE_URL",
+          "value": "http://places-discovery:8082"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "<SECRET_ARN_OPENAI_API_KEY>"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1:8081/actuator/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "stopTimeout": 30,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ai-travel-companion-recommendation",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
