@@ -14,8 +14,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -34,13 +36,17 @@ public class DefaultRecommendationService implements RecommendationService {
     private final AttractionProvider attractionProvider;
     private final RecommendationRankingService rankingService;
     private final RecommendationProperties properties;
+    private final Optional<AIRecommendationService> aiRecommendationService;
 
+    /** The AI engine is present only when {@code travel.ai.enabled=true}; otherwise ranking alone decides. */
     public DefaultRecommendationService(AttractionProvider attractionProvider,
                                         RecommendationRankingService rankingService,
-                                        RecommendationProperties properties) {
+                                        RecommendationProperties properties,
+                                        Optional<AIRecommendationService> aiRecommendationService) {
         this.attractionProvider = attractionProvider;
         this.rankingService = rankingService;
         this.properties = properties;
+        this.aiRecommendationService = aiRecommendationService;
     }
 
     @Override
@@ -57,16 +63,49 @@ public class DefaultRecommendationService implements RecommendationService {
         }
 
         // Exclusions are applied before ranking so the top-N is filled from the remaining eligible candidates.
-        List<RecommendationDto> recommendations = candidates.stream()
+        List<RankedRecommendation> ranked = candidates.stream()
                 .filter(attraction -> !excludedPlaceIds.contains(attraction.id()))
                 .map(attraction -> evaluate(attraction, request))
                 .flatMap(Optional::stream)
                 .map(candidate -> new RankedRecommendation(candidate, rankingService.score(candidate, request)))
                 .sorted(RANKING_ORDER)
-                .limit(properties.maxRecommendations())
-                .map(ranked -> toDto(ranked, request))
                 .toList();
 
+        if (ranked.isEmpty()) {
+            return new RecommendationResponse(List.of());
+        }
+        if (aiRecommendationService.isPresent()) {
+            return recommendWithAi(request, ranked, aiRecommendationService.get());
+        }
+
+        List<RecommendationDto> recommendations = ranked.stream()
+                .limit(properties.maxRecommendations())
+                .map(r -> toDto(r.candidate(), explanation(r, request), request))
+                .toList();
+
+        return new RecommendationResponse(recommendations);
+    }
+
+    /**
+     * The AI engine selects only from the eligible, ranked candidates (it never discovers places), so every
+     * returned attraction has already passed the same budget, time, distance, and interest checks.
+     */
+    private RecommendationResponse recommendWithAi(RecommendationRequest request,
+                                                   List<RankedRecommendation> ranked,
+                                                   AIRecommendationService ai) {
+        Map<String, RankedRecommendation> byId = new HashMap<>();
+        ranked.forEach(r -> byId.putIfAbsent(r.candidate().attraction().id(), r));
+
+        List<Attraction> attractions = ranked.stream().map(r -> r.candidate().attraction()).toList();
+        TravelerPreferences preferences = new TravelerPreferences(
+                Set.copyOf(request.interests()), request.maxBudget(), request.currencyCode(),
+                request.availableMinutes());
+
+        List<RecommendationDto> recommendations = ai.recommend(preferences, attractions).stream()
+                .filter(selection -> byId.containsKey(selection.attractionId()))
+                .map(selection -> toDto(byId.get(selection.attractionId()).candidate(),
+                        selection.reason(), request))
+                .toList();
         return new RecommendationResponse(recommendations);
     }
 
@@ -105,15 +144,14 @@ public class DefaultRecommendationService implements RecommendationService {
         return Optional.of(new CandidateAttraction(attraction, distanceKm, walkingMinutes));
     }
 
-    private RecommendationDto toDto(RankedRecommendation ranked, RecommendationRequest request) {
-        CandidateAttraction candidate = ranked.candidate();
+    private RecommendationDto toDto(CandidateAttraction candidate, String description, RecommendationRequest request) {
         Attraction attraction = candidate.attraction();
         boolean hasCost = attraction.estimatedCost() != null;
         return new RecommendationDto(
                 attraction.id(),
                 attraction.name(),
                 categoryLabel(attraction),
-                explanation(ranked, request),
+                description,
                 attraction.latitude(),
                 attraction.longitude(),
                 attraction.estimatedDurationMinutes(),

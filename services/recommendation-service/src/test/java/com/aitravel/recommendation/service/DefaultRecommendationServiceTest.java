@@ -14,6 +14,7 @@ import com.aitravel.recommendation.model.Interest;
 import com.aitravel.recommendation.provider.AttractionProvider;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,49 @@ class DefaultRecommendationServiceTest {
         MockitoAnnotations.openMocks(this);
         RecommendationProperties properties = new RecommendationProperties(5.0, 4.5, 3);
         service = new DefaultRecommendationService(
-                attractionProvider, new RecommendationRankingService(properties), properties);
+                attractionProvider, new RecommendationRankingService(properties), properties, Optional.empty());
+    }
+
+    private DefaultRecommendationService serviceWithAi(AIRecommendationService ai) {
+        RecommendationProperties properties = new RecommendationProperties(5.0, 4.5, 3);
+        return new DefaultRecommendationService(
+                attractionProvider, new RecommendationRankingService(properties), properties, Optional.of(ai));
+    }
+
+    @Test
+    void aiEngineReceivesOnlyEligibleCandidatesAndItsSelectionsAndReasonsAreReturned() {
+        givenProvider(
+                attraction("history", Set.of(Interest.HISTORY), "16", "EUR", 60, ORIGIN_LAT, ORIGIN_LON),
+                attraction("food", Set.of(Interest.FOOD), "10", "EUR", 60, ORIGIN_LAT, ORIGIN_LON),
+                attraction("pricey", Set.of(Interest.HISTORY), "99", "EUR", 60, ORIGIN_LAT, ORIGIN_LON));
+        List<String> offered = new java.util.ArrayList<>();
+        AIRecommendationService ai = (preferences, candidates) -> {
+            candidates.forEach(c -> offered.add(c.id()));
+            return List.of(
+                    new AiRecommendation("history", "Fits your history interest."),
+                    new AiRecommendation("not-a-candidate", "Invented place."));
+        };
+
+        RecommendationResponse response = serviceWithAi(ai).recommend(
+                request(Set.of(Interest.HISTORY), "50", "EUR", 180));
+
+        assertThat(offered).containsExactly("history");
+        assertThat(response.recommendations()).extracting(RecommendationDto::placeId).containsExactly("history");
+        assertThat(response.recommendations().get(0).description()).isEqualTo("Fits your history interest.");
+    }
+
+    @Test
+    void aiEngineIsNotCalledWhenNoCandidateIsEligible() {
+        givenProvider(
+                attraction("pricey", Set.of(Interest.HISTORY), "99", "EUR", 60, ORIGIN_LAT, ORIGIN_LON));
+        AIRecommendationService ai = (preferences, candidates) -> {
+            throw new AssertionError("AI must not be called without eligible candidates");
+        };
+
+        RecommendationResponse response = serviceWithAi(ai).recommend(
+                request(Set.of(Interest.HISTORY), "50", "EUR", 180));
+
+        assertThat(response.recommendations()).isEmpty();
     }
 
     @Test

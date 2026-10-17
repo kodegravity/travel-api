@@ -61,6 +61,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
     }
 
+    // Same convention as the provider handler: the upstream AI error is logged by type only, never returned.
+    @ExceptionHandler(AiRecommendationException.class)
+    public ResponseEntity<ProblemDetail> handleAiUnavailable(AiRecommendationException ex) {
+        log.warn("AI recommendation failed with cause type {}",
+                ex.getCause() == null ? "none" : ex.getCause().getClass().getName());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE, "AI recommendations are temporarily unavailable. Please try again later.");
+        problem.setTitle("AI recommendation unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
     // Only the parameter name is echoed, never the submitted value.
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ProblemDetail> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {

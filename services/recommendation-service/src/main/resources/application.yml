@@ -10,7 +10,7 @@ spring:
         options:
           model: ${TRAVEL_AI_MODEL:gpt-4o-mini}
     model:
-      chat: ${SPRING_AI_MODEL_CHAT:none}
+      chat: ${SPRING_AI_MODEL_CHAT:openai}
       embedding: none
       image: none
       audio:

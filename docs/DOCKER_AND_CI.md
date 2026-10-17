@@ -38,12 +38,11 @@ These names are read from `src/main/resources/application.yml`. Nothing else is 
 | Variable | Default | Purpose |
 |---|---|---|
 | `SERVER_PORT` | `8080` | HTTP port inside the container |
-| `ATTRACTION_PROVIDER` | `mock` | `mock` or `google` |
-| `GOOGLE_PLACES_API_KEY` | empty | Required only when `ATTRACTION_PROVIDER=google` |
-| `TRAVEL_AI_ENABLED` | `false` | Enables AI personalization |
-| `SPRING_AI_MODEL_CHAT` | `none` | Set to `openai` only with AI enabled |
-| `OPENAI_API_KEY` | empty | Required only when `TRAVEL_AI_ENABLED=true` |
-| `TRAVEL_AI_MODEL` | `gpt-4o-mini` | OpenAI chat model |
+| `ATTRACTION_PROVIDER` | `mock` | Places Discovery service. `mock` or `google` |
+| `GOOGLE_PLACES_API_KEY` | empty | Places Discovery service. Required only when `ATTRACTION_PROVIDER=google` |
+| `OPENAI_API_KEY` | empty | Recommendation service. Required only when `TRAVEL_AI_ENABLED=true` |
+| `TRAVEL_AI_ENABLED` | `false` | Recommendation service. Sends eligible candidates to OpenAI for selection and reasons |
+| `TRAVEL_AI_MODEL` | `gpt-4o-mini` | Recommendation service. OpenAI chat model |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins for `/api/v1/**` |
 | `RECOMMENDATION_SEARCH_RADIUS_KM` | `5` | Search radius |
 | `RECOMMENDATION_WALKING_SPEED_KMH` | `4.5` | Walking speed |
@@ -64,26 +63,30 @@ docker run --rm -p 8080:8080 -e SERVER_PORT=9090 -p 9090:9090 ai-travel-companio
 
 Secrets must be passed at run time (`-e` or `--env-file`), never baked into the image. `.dockerignore` excludes `.env*`, `*.pem`, and `*.key`.
 
-### Use the real Google Places provider later
+### Google Places and OpenAI (Places Discovery and Recommendation services)
+
+Both integrations are off by default. Each is enabled by its own service's environment variables:
+
+| Service | Variables | Effect |
+|---|---|---|
+| Places Discovery (`services/places-discovery-service`) | `ATTRACTION_PROVIDER=google`, `GOOGLE_PLACES_API_KEY` | Nearby search uses Google Places API (New) `places:searchNearby`. The key stays on this service. |
+| Recommendation (`services/recommendation-service`) | `TRAVEL_AI_ENABLED=true`, `OPENAI_API_KEY`, optional `TRAVEL_AI_MODEL` | Ranked, eligible candidates go to OpenAI, which picks up to `TRAVEL_AI_MAX_RECOMMENDATIONS` and writes each reason. The model never discovers places. |
+
+Spring AI's OpenAI chat model is configured by default (`SPRING_AI_MODEL_CHAT=openai`). It is only called when `TRAVEL_AI_ENABLED=true`. With `TRAVEL_AI_ENABLED=true` and no `OPENAI_API_KEY`, that service refuses to start, and the error names the variable.
+
+If an enabled provider fails, the endpoint returns 503 (`Attraction data is temporarily unavailable` or `AI recommendations are temporarily unavailable`). There is no silent fallback to mock data or to non-AI results. Upstream errors and keys are never returned or logged.
 
 ```bash
-docker run --rm -p 8080:8080 \
-  -e ATTRACTION_PROVIDER=google \
-  -e GOOGLE_PLACES_API_KEY="<your-key>" \
-  ai-travel-companion-api:local
+# Places Discovery on 8082 with Google Places
+ATTRACTION_PROVIDER=google GOOGLE_PLACES_API_KEY="<your-key>" SERVER_PORT=8082 \
+  java -jar services/places-discovery-service/target/places-discovery-service-0.0.1-SNAPSHOT.jar
+
+# Recommendation on 8081 with OpenAI, using the Places service above
+TRAVEL_AI_ENABLED=true OPENAI_API_KEY="<your-key>" SERVER_PORT=8081 \
+  java -jar services/recommendation-service/target/recommendation-service-0.0.1-SNAPSHOT.jar
 ```
 
-### Enable Spring AI later
-
-```bash
-docker run --rm -p 8080:8080 \
-  -e TRAVEL_AI_ENABLED=true \
-  -e SPRING_AI_MODEL_CHAT=openai \
-  -e OPENAI_API_KEY="<your-key>" \
-  ai-travel-companion-api:local
-```
-
-Without `OPENAI_API_KEY`, the app refuses to start when AI is enabled. The error message names the variable.
+In Docker, use the same variables with `-e`, and set `PLACES_DISCOVERY_BASE_URL` to the Places container's address when the containers share a network.
 
 ## Health check
 
