@@ -1,6 +1,10 @@
 spring:
   application:
     name: travel-companion-api
+  lifecycle:
+    # Upper bound for graceful shutdown on SIGTERM. Keep below the container stop timeout (ECS default: 30s)
+    # so the JVM exits before SIGKILL.
+    timeout-per-shutdown-phase: 25s
   ai:
     openai:
       # Read from the environment only. Required only when travel.ai.enabled=true.
@@ -21,6 +25,8 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  # On SIGTERM, finish in-flight requests before the JVM exits.
+  shutdown: graceful
 
 attraction:
   # Attraction source: "mock" (default, in-memory Rome data) or "google" (Google Places API New).

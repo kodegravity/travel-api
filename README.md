@@ -59,6 +59,10 @@ Configuration lives in `src/main/resources/application.yml`.
 
 Actuator exposes only `health`, with details hidden. Secrets and API keys must never be committed. Future secrets will be supplied through environment variables.
 
+## Docker and CI
+
+The container image, environment variables, health check, and GitHub Actions pipeline are documented in [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md).
+
 ## Build and Test
 
 ```bash
