@@ -1,6 +1,25 @@
 # ECS Fargate deployment (definitions only)
 
-Status: definitions and documentation only. No AWS resources have been created, and nothing is deployed. Apply these steps when you are ready.
+Status: deployed to AWS us-east-2 (cluster `ai-travel-app`). Public base URL: `http://ai-travel-app-alb-179383308.us-east-2.elb.amazonaws.com` (HTTP only, see Known limits).
+
+Deployed resources (all prefixed `ai-travel-app`, except the ECR repos and task families, which keep their existing names):
+
+| Resource | Name |
+|---|---|
+| ECS cluster | `ai-travel-app` |
+| Service Connect namespace | `ai-travel-app` |
+| ALB | `ai-travel-app-alb` (HTTP :80) |
+| Target group | `ai-travel-app-session-tg` (IP, :8080, `/actuator/health`) |
+| Security groups | `ai-travel-app-alb-sg`, `-session-sg`, `-recommendation-sg`, `-places-sg` |
+| Execution role | `ai-travel-app-ecs-execution` |
+| Log groups | `/ecs/ai-travel-companion-<service>` (14-day retention) |
+| Services | `travel-session` (ALB), `recommendation`, `places-discovery` (1 task each) |
+
+Networking differs from the original plan: the services run in the default VPC public subnets with `assignPublicIp=ENABLED`, which avoids a NAT gateway. Inbound access is still limited by security groups. Only the ALB accepts traffic from the internet, and the internal services accept traffic only from the upstream service's security group.
+
+Task definitions were registered with `ATTRACTION_PROVIDER=mock`, `TRAVEL_AI_ENABLED=false`, and no Secrets Manager entries. The `OKTA_ISSUER` and `OKTA_AUDIENCE` values were injected at registration time and are not stored in this repo. The `CORS_ALLOWED_ORIGINS` value is `http://localhost:5173`, so a deployed frontend needs this updated.
+
+The sections below were the original plan. Use them as a reference.
 
 Region: `us-east-2`. Images come from the ECR repositories `ai-travel-companion-places-discovery`, `ai-travel-companion-recommendation`, and `ai-travel-companion-travel-session`, which the `ecr-push` job publishes on `master`.
 
