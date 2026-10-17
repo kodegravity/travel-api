@@ -61,14 +61,19 @@ public class GooglePlacesAttractionProvider implements AttractionProvider {
                         new LatLng(latitude.doubleValue(), longitude.doubleValue()),
                         searchRadiusKm * METRES_PER_KM)));
 
+        log.info("Calling Google Places searchNearby radiusKm={} maxResults={}", searchRadiusKm, properties.maxResultCount());
+        log.debug("Google Places search coordinates latitude={} longitude={}", latitude, longitude);
         SearchNearbyResponse response = search(request);
         if (response == null || response.places() == null) {
+            log.info("Google Places searchNearby returned no places");
             return List.of();
         }
-        return response.places().stream()
+        List<Attraction> attractions = response.places().stream()
                 .map(GooglePlaceMapper::toAttraction)
                 .flatMap(Optional::stream)
                 .toList();
+        log.info("Google Places searchNearby mapped {} of {} places", attractions.size(), response.places().size());
+        return attractions;
     }
 
     private SearchNearbyResponse search(SearchNearbyRequest request) {

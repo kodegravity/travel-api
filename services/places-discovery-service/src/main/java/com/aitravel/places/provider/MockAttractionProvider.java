@@ -4,6 +4,8 @@ import com.aitravel.places.model.Attraction;
 import com.aitravel.places.model.Interest;
 import java.math.BigDecimal;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Set;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "attraction", name = "provider", havingValue = "mock", matchIfMissing = true)
 public class MockAttractionProvider implements AttractionProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(MockAttractionProvider.class);
     private static final List<Attraction> ATTRACTIONS = List.of(
             attraction("colosseum", "Colosseum", Set.of(Interest.HISTORY),
                     "41.8902", "12.4922", "16.00", 120,
@@ -54,6 +57,7 @@ public class MockAttractionProvider implements AttractionProvider {
 
     @Override
     public List<Attraction> findNearby(BigDecimal latitude, BigDecimal longitude, double searchRadiusKm) {
+        log.info("Mock provider returning {} attractions", ATTRACTIONS.size());
         return ATTRACTIONS;
     }
 

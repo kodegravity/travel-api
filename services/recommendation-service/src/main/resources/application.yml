@@ -61,3 +61,6 @@ management:
       show-details: never
       probes:
         enabled: false
+logging:
+  level:
+    com.aitravel: ${LOGGING_LEVEL_COM_AITRAVEL:INFO}

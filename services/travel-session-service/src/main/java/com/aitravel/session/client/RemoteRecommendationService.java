@@ -39,7 +39,11 @@ public class RemoteRecommendationService implements RecommendationService {
 
     @Override
     public RecommendationResponse recommend(RecommendationRequest request, Set<String> excludedPlaceIds) {
+        log.info("Sending recommendation search to {} excludedPlaces={}", RECOMMENDATIONS_PATH, excludedPlaceIds.size());
+        log.debug("Recommendation search request interests={} availableMinutes={} maxBudget={} currency={}",
+                request.interests(), request.availableMinutes(), request.maxBudget(), request.currencyCode());
         RecommendationResponse response = post(new RecommendationSearchRequest(request, excludedPlaceIds));
+        log.info("Recommendation service responded count={}", response.recommendations().size());
         if (response == null) {
             throw new AttractionProviderException("Recommendation Service returned no body", null);
         }

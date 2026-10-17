@@ -296,3 +296,46 @@ Press `Ctrl+C` in each terminal. If a port is still busy, see the "Port already 
 - `401` on every call: `TOKEN` is empty or expired. Check with `echo $TOKEN`.
 - `415 Unsupported Media Type`: add `-H "Content-Type: application/json"`.
 - `OKTA_ISSUER must be set`: the variable is not exported in that terminal.
+
+
+## Mermaid diagram 
+sequenceDiagram
+actor User
+participant Client as Postman / React app
+participant Okta
+participant ALB as AWS ALB
+participant Session as travel-session :8080
+participant Rec as recommendation :8081
+participant Places as places-discovery :8082
+
+    Note over User,Okta: 1. Get token (OAuth Authorization Code + PKCE)
+    Client->>Okta: GET /oauth2/default/v1/authorize (scope: openid profile email, code_challenge)
+    Okta->>User: Login page
+    User->>Okta: Credentials
+    Okta-->>Client: Redirect to callback with authorization code
+    Client->>Okta: POST /oauth2/default/v1/token (code, code_verifier)
+    Okta-->>Client: access_token (JWT, aud = api://travel-app)
+
+    Note over Client,Places: 2. Create travel session
+    Client->>ALB: POST /api/v1/travel-sessions (Bearer token)
+    ALB->>Session: Forward request
+    Session->>Okta: Fetch signing keys (cached), validate JWT iss/aud
+    Session-->>Client: 201 {sessionId, status: ACTIVE, expiresAt}
+    Note right of Session: Session stores JWT sub as owner (in memory)
+
+    Note over Client,Places: 3. Refresh recommendations
+    Client->>ALB: POST /api/v1/travel-sessions/{id}/recommendations (Bearer token)
+    ALB->>Session: Forward request
+    Session->>Session: Check session exists and belongs to sub
+    Session->>Rec: POST (forwards Bearer token)
+    Rec->>Okta: Validate JWT (cached keys)
+    Rec->>Places: Search attractions (forwards Bearer token)
+    Places->>Okta: Validate JWT (cached keys)
+    Places-->>Rec: Places (mock or Google)
+    Rec-->>Session: Recommendations
+    Session-->>Client: 200 {refreshStatus: UPDATED, recommendations}
+
+    Note over Client,Places: 4. End session
+    Client->>ALB: DELETE /api/v1/travel-sessions/{id} (Bearer token)
+    ALB->>Session: Forward request
+    Session-->>Client: 204 No Content

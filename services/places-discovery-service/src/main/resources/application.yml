@@ -46,3 +46,6 @@ management:
       # Boot 4 lists the liveness/readiness probe groups in the root response; this service has no k8s probes.
       probes:
         enabled: false
+logging:
+  level:
+    com.aitravel: ${LOGGING_LEVEL_COM_AITRAVEL:INFO}

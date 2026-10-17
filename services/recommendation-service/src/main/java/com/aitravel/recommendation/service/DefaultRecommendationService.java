@@ -21,12 +21,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class DefaultRecommendationService implements RecommendationService {
 
+    private static final Logger log = LoggerFactory.getLogger(DefaultRecommendationService.class);
     private static final String MAPS_DIRECTIONS_URL = "https://www.google.com/maps/dir/";
     private static final Comparator<RankedRecommendation> RANKING_ORDER =
             Comparator.comparingDouble((RankedRecommendation r) -> r.score().totalScore())
@@ -57,10 +60,13 @@ public class DefaultRecommendationService implements RecommendationService {
     @Override
     public RecommendationResponse recommend(RecommendationRequest request, Set<String> excludedPlaceIds) {
         LocationRequest origin = request.location();
+        log.info("Requesting attractions from provider {}", attractionProvider.getClass().getSimpleName());
         List<Attraction> candidates = attractionProvider.findNearby(origin.latitude(), origin.longitude());
         if (candidates == null || candidates.isEmpty()) {
+            log.info("Provider returned no attractions");
             return new RecommendationResponse(List.of());
         }
+        log.debug("Provider returned {} candidate attractions", candidates.size());
 
         // Exclusions are applied before ranking so the top-N is filled from the remaining eligible candidates.
         List<RankedRecommendation> ranked = candidates.stream()
@@ -71,10 +77,12 @@ public class DefaultRecommendationService implements RecommendationService {
                 .sorted(RANKING_ORDER)
                 .toList();
 
+        log.info("Eligible attractions after filtering and ranking: {} of {}", ranked.size(), candidates.size());
         if (ranked.isEmpty()) {
             return new RecommendationResponse(List.of());
         }
         if (aiRecommendationService.isPresent()) {
+            log.info("Delegating {} eligible attractions to AI recommendation engine", ranked.size());
             return recommendWithAi(request, ranked, aiRecommendationService.get());
         }
 
@@ -82,6 +90,7 @@ public class DefaultRecommendationService implements RecommendationService {
                 .limit(properties.maxRecommendations())
                 .map(r -> toDto(r.candidate(), explanation(r, request), request))
                 .toList();
+        log.debug("Ranking selected {} recommendations", recommendations.size());
 
         return new RecommendationResponse(recommendations);
     }

@@ -63,7 +63,10 @@ public class TravelSessionService {
                 inactivityTimeout(),
                 maxLifetime());
 
+        log.debug("Creating session sessionId={} owner={} maxBudget={} currency={} expiresAt={}",
+                session.sessionId(), ownerSubject, request.maxBudget(), request.currencyCode(), session.expiresAt());
         if (!repository.addIfCapacity(session, properties.maxActiveSessions(), now, retention())) {
+            log.warn("Session capacity reached, rejecting new session owner={}", ownerSubject);
             throw new TravelSessionException(Reason.CAPACITY_REACHED);
         }
         log.info("Travel session created sessionId={} owner={}", session.sessionId(), ownerSubject);
@@ -74,7 +77,9 @@ public class TravelSessionService {
         Instant now = clock.instant();
         TravelSession session = requireActive(sessionId, ownerSubject, now);
 
+        log.debug("Refresh requested sessionId={}", sessionId);
         if (!session.tryBeginRefresh()) {
+            log.info("Refresh rejected, another refresh is in progress sessionId={}", sessionId);
             throw new TravelSessionException(Reason.REFRESH_IN_PROGRESS);
         }
         try {
@@ -84,6 +89,7 @@ public class TravelSessionService {
             if (!shouldRefresh(snapshot, current, now)) {
                 // Skipped refreshes extend the session but do not move the movement baseline or cooldown clock.
                 session.touch(now);
+                log.info("Refresh skipped sessionId={} reason=movement-or-cooldown-not-met status=UNCHANGED", sessionId);
                 return response(sessionId, RefreshStatus.UNCHANGED, List.of(), now);
             }
 
@@ -94,9 +100,12 @@ public class TravelSessionService {
                     snapshot.maxBudget(),
                     snapshot.currencyCode(),
                     snapshot.availableMinutes());
+            log.info("Calling recommendation service sessionId={} excludedPlaces={}",
+                    sessionId, snapshot.recommendedPlaceIds().size());
             RecommendationResponse result =
                     recommendationService.recommend(recommendationRequest, snapshot.recommendedPlaceIds());
             List<RecommendationDto> recommendations = result.recommendations();
+            log.debug("Recommendation service returned sessionId={} count={}", sessionId, recommendations.size());
             List<String> placeIds = recommendations.stream()
                     .map(RecommendationDto::placeId)
                     .filter(Objects::nonNull)
@@ -107,6 +116,7 @@ public class TravelSessionService {
                 throw stateException(session, now);
             }
             RefreshStatus status = recommendations.isEmpty() ? RefreshStatus.NO_NEW_RESULTS : RefreshStatus.UPDATED;
+            log.info("Refresh completed sessionId={} status={} count={}", sessionId, status, recommendations.size());
             return response(sessionId, status, recommendations, now);
         } finally {
             session.endRefresh();

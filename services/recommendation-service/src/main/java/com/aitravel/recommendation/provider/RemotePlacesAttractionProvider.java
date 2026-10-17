@@ -42,10 +42,13 @@ public class RemotePlacesAttractionProvider implements AttractionProvider {
                 new Coordinates(latitude, longitude),
                 recommendationProperties.searchRadiusKm());
 
+        log.info("Calling Places Discovery Service {} radiusKm={}", SEARCH_PATH, request.searchRadiusKm());
+        log.debug("Places search coordinates latitude={} longitude={}", latitude, longitude);
         SearchResponse response = search(request);
         if (response == null || response.attractions() == null) {
             throw new AttractionProviderException("Places Discovery Service returned no body", null);
         }
+        log.info("Places Discovery Service responded count={}", response.attractions().size());
         return response.attractions();
     }
 

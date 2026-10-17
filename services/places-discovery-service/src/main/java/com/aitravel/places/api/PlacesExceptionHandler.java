@@ -62,7 +62,6 @@ public class PlacesExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
     }
 
-    @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) {
         log.error("Unhandled exception of type {}", ex.getClass().getName());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
