@@ -37,6 +37,14 @@
         {
           "name": "PLACES_DISCOVERY_BASE_URL",
           "value": "http://places-discovery:8082"
+        },
+        {
+          "name": "OKTA_ISSUER",
+          "value": "<OKTA_ISSUER>"
+        },
+        {
+          "name": "OKTA_AUDIENCE",
+          "value": "<OKTA_AUDIENCE>"
         }
       ],
       "secrets": [

@@ -3,6 +3,19 @@ spring:
     name: places-discovery-service
   lifecycle:
     timeout-per-shutdown-phase: 25s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Okta authorization server issuer, e.g. https://your-domain.okta.com/oauth2/default. Required.
+          issuer-uri: ${OKTA_ISSUER:}
+
+travel:
+  security:
+    # Expected "aud" claim in Okta access tokens. Required.
+    audience: ${OKTA_AUDIENCE:}
+    # Optional scope every /internal/v1 call must carry. Leave empty to accept any valid token.
+    required-scope: ${TRAVEL_REQUIRED_SCOPE:}
 
 server:
   port: ${SERVER_PORT:8082}

@@ -15,7 +15,10 @@ import com.aitravel.places.provider.AttractionProvider;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
+import com.aitravel.places.config.JwtTestSupport;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -23,6 +26,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(PlacesSearchController.class)
+@TestPropertySource(properties = {JwtTestSupport.ISSUER_PROPERTY, JwtTestSupport.AUDIENCE_PROPERTY})
+@Import({JwtTestSupport.TrustedKeyDecoderConfig.class, JwtTestSupport.DefaultJwtMockMvcConfig.class})
 class PlacesSearchControllerTest {
 
     private static final String PATH = "/internal/v1/places/search";

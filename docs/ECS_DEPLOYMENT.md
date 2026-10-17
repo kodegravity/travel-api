@@ -44,8 +44,8 @@ The files contain placeholders that must be replaced before registration:
 | `<SECRET_ARN_GOOGLE_PLACES_API_KEY>` | Secrets Manager ARN for the Google key. Only needed when `ATTRACTION_PROVIDER=google` |
 | `<SECRET_ARN_OPENAI_API_KEY>` | Secrets Manager ARN for the OpenAI key. Only needed when `TRAVEL_AI_ENABLED=true` |
 | `<FRONTEND_ORIGIN>` | Browser origin of the React app, for CORS |
-| `<OKTA_ISSUER>` | Okta issuer URI for the travel session service (e.g. `https://<okta-domain>/oauth2/default`). Required |
-| `<OKTA_AUDIENCE>` | Audience configured on the Okta authorization server for this API. Required |
+| `<OKTA_ISSUER>` | Okta issuer URI, used by all three services (e.g. `https://<okta-domain>/oauth2/default`). Required |
+| `<OKTA_AUDIENCE>` | Audience configured on the Okta authorization server, used by all three services. Required |
 
 Keys are never placed in these files. ECS injects them from Secrets Manager at task start.
 

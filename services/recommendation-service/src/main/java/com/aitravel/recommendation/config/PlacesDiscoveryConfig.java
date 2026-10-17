@@ -20,6 +20,7 @@ public class PlacesDiscoveryConfig {
         return RestClient.builder()
                 .baseUrl(properties.baseUrl())
                 .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
+                .requestInterceptor(new BearerTokenForwardingInterceptor())
                 .build();
     }
 }

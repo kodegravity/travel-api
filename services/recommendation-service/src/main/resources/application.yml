@@ -3,6 +3,12 @@ spring:
     name: recommendation-service
   lifecycle:
     timeout-per-shutdown-phase: 25s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Okta authorization server issuer, e.g. https://your-domain.okta.com/oauth2/default. Required.
+          issuer-uri: ${OKTA_ISSUER:}
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:}
@@ -34,6 +40,11 @@ recommendation:
   max-recommendations: ${RECOMMENDATION_MAX_RESULTS:3}
 
 travel:
+  security:
+    # Expected "aud" claim in Okta access tokens. Required.
+    audience: ${OKTA_AUDIENCE:}
+    # Optional scope every /internal/v1 call must carry. Leave empty to accept any valid token.
+    required-scope: ${TRAVEL_REQUIRED_SCOPE:}
   ai:
     enabled: ${TRAVEL_AI_ENABLED:false}
     model: ${TRAVEL_AI_MODEL:gpt-4o-mini}

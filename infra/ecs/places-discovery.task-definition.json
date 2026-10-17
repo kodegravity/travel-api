@@ -33,6 +33,14 @@
         {
           "name": "ATTRACTION_PROVIDER",
           "value": "mock"
+        },
+        {
+          "name": "OKTA_ISSUER",
+          "value": "<OKTA_ISSUER>"
+        },
+        {
+          "name": "OKTA_AUDIENCE",
+          "value": "<OKTA_AUDIENCE>"
         }
       ],
       "secrets": [

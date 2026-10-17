@@ -14,7 +14,10 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import com.aitravel.recommendation.config.JwtTestSupport;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -30,6 +33,8 @@ import tools.jackson.databind.ObjectMapper;
  * by the same Rome fixtures the monolith used for its mock provider, so results match the original behaviour.
  */
 @SpringBootTest
+@TestPropertySource(properties = {JwtTestSupport.ISSUER_PROPERTY, JwtTestSupport.AUDIENCE_PROPERTY})
+@Import({JwtTestSupport.TrustedKeyDecoderConfig.class, JwtTestSupport.DefaultJwtMockMvcConfig.class})
 @AutoConfigureMockMvc
 class InternalRecommendationEndpointIntegrationTest {
 
