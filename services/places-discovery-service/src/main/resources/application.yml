@@ -11,6 +11,9 @@ spring:
           issuer-uri: ${OKTA_ISSUER:}
 
 travel:
+  warmup:
+    # Background warm-up after startup (Okta keys, first downstream connection).
+    enabled: ${TRAVEL_WARMUP_ENABLED:true}
   security:
     # Expected "aud" claim in Okta access tokens. Required.
     audience: ${OKTA_AUDIENCE:}
