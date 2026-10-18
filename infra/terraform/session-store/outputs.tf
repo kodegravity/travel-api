@@ -4,6 +4,6 @@ output "table_name" {
 }
 
 output "task_role_arn" {
-  description = "Set as taskRoleArn on the travel-session task definition."
-  value       = aws_iam_role.travel_session_task.arn
+  description = "Task role that received DynamoDB access; must be the travel-session taskRoleArn."
+  value       = data.aws_iam_role.travel_session_task.arn
 }

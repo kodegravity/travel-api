@@ -11,7 +11,7 @@
     "operatingSystemFamily": "LINUX"
   },
   "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-travel-companion-ecs-execution",
-  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-travel-app-travel-session-task",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ai-travel-app-ecs-task",
   "containerDefinitions": [
     {
       "name": "ai-travel-companion-travel-session",

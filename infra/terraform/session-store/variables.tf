@@ -11,7 +11,7 @@ variable "table_name" {
 }
 
 variable "task_role_name" {
-  description = "IAM role the travel-session ECS task runs as (taskRoleArn)."
+  description = "Existing IAM role the travel-session ECS task runs as (its taskRoleArn). Gets DynamoDB access."
   type        = string
-  default     = "ai-travel-app-travel-session-task"
+  default     = "ai-travel-app-ecs-task"
 }

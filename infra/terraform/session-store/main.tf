@@ -32,23 +32,9 @@ resource "aws_dynamodb_table" "sessions" {
   }
 }
 
-data "aws_iam_policy_document" "ecs_tasks_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "travel_session_task" {
-  name               = var.task_role_name
-  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
-
-  tags = {
-    project = "roam-ai"
-  }
+# The travel-session task role already exists (passed to the task definition by ../ecs-services).
+data "aws_iam_role" "travel_session_task" {
+  name = var.task_role_name
 }
 
 # Least privilege: only the item operations the repository uses, only on this table.
@@ -66,6 +52,6 @@ data "aws_iam_policy_document" "sessions_access" {
 
 resource "aws_iam_role_policy" "sessions_access" {
   name   = "travel-session-dynamodb"
-  role   = aws_iam_role.travel_session_task.id
+  role   = data.aws_iam_role.travel_session_task.id
   policy = data.aws_iam_policy_document.sessions_access.json
 }
