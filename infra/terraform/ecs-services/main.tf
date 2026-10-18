@@ -135,6 +135,8 @@ resource "aws_ecs_task_definition" "travel_session" {
         { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
         { name = "TRAVEL_SESSION_STORE", value = "dynamodb" },
         { name = "TRAVEL_SESSION_TABLE", value = var.session_table_name },
+        { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
+        { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)
       stopTimeout    = 30
       mountPoints    = []
@@ -261,6 +263,12 @@ resource "aws_ecs_service" "travel_session" {
     service {
       port_name      = "http"
       discovery_name = "travel-session"
+
+      # ECS requires an alias for every Service Connect server; nothing calls travel-session by this name today.
+      client_alias {
+        dns_name = "travel-session"
+        port     = 8080
+      }
     }
   }
 }

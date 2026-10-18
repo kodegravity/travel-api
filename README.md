@@ -77,7 +77,8 @@ Only `health` is exposed. Other actuator endpoints return 404 by design.
 ## Docker, CI, and AWS
 
 - Docker images and the GitHub Actions pipeline (build, test, Trivy scan, ECR push via OIDC): [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md)
-- ECS Fargate deployment (cluster `ai-travel-app`, us-east-2): [docs/ECS_DEPLOYMENT.md](docs/ECS_DEPLOYMENT.md), task definitions in `infra/ecs/`
+- Public entry point: API Gateway HTTP API (HTTPS, Okta JWT authorizer, 5 req/s throttle) -> VPC link -> travel-session. recommendation and places-discovery are reachable only over Service Connect. Terraform: `infra/terraform/api-gateway`
+- ECS Fargate deployment (cluster `ai-travel-app`, us-east-2): Terraform in `infra/terraform/ecs-services`; `infra/ecs/*.json` are reference templates. Session table: `infra/terraform/session-store`. See also [docs/ECS_DEPLOYMENT.md](docs/ECS_DEPLOYMENT.md)
 - Logs: CloudWatch `/ecs/ai-travel-companion-<service>`, forwarded to Datadog by the Datadog Forwarder Lambda
 - Frontend integration: [docs/FRONTEND_API_INTEGRATION.md](docs/FRONTEND_API_INTEGRATION.md)
 
