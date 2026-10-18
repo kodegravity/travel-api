@@ -11,6 +11,14 @@ resource "aws_secretsmanager_secret" "google_places_api_key" {
   description = "Google Places API key for the places-discovery service."
 }
 
+# Browser key for the Google Maps JavaScript API. Read only by the web app's dev script (it ends up in the
+# browser by design, so it must be restricted in Google Cloud to the site's referrers and the Maps JavaScript API).
+# No ECS task reads it.
+resource "aws_secretsmanager_secret" "google_maps_browser_key" {
+  name        = "ai-travel-app/google-maps-browser-key"
+  description = "Google Maps JavaScript API browser key for the web app (VITE_GOOGLE_MAPS_API_KEY)."
+}
+
 resource "aws_iam_role_policy" "ecs_execution_read_secrets" {
   name = "read-ai-travel-app-api-keys"
   role = var.execution_role_name
