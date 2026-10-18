@@ -18,8 +18,8 @@ resource "aws_iam_role_policy" "ecs_execution_read_secrets" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue"]
       Resource = [
         aws_secretsmanager_secret.openai_api_key.arn,
         aws_secretsmanager_secret.google_places_api_key.arn,

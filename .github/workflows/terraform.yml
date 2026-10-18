@@ -1,0 +1,173 @@
+name: Terraform
+
+on:
+  pull_request:
+    branches: [development]
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/terraform.yml'
+  push:
+    branches: [development]
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+
+# Read-only by default. Jobs that touch AWS request an OIDC token; no long-lived AWS keys are stored.
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+# Each root module is planned on pull requests. Only modules marked apply: true are applied, and only on master pushes.
+# State must be remote (S3 + DynamoDB lock). The guard step below fails the job if a backend.hcl file is missing.
+jobs:
+  plan:
+    name: Plan (${{ matrix.module }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: infra/terraform/internal-routes
+          - module: infra/terraform/ecs-services
+          - module: infra/terraform/secrets
+          - module: infra/terraform/api-gateway
+          - module: infra/terraform/session-store
+    env:
+      AWS_REGION: us-east-2
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.5.7
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.TF_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: terraform-plan-${{ github.run_id }}
+
+      - name: Require remote state backend
+        working-directory: ${{ matrix.module }}
+        run: |
+          if [ ! -f backend.hcl ]; then
+            echo "::error::$PWD has no backend.hcl. Move local state to S3 before running Terraform in CI."
+            exit 1
+          fi
+
+      - name: Format check
+        working-directory: ${{ matrix.module }}
+        run: terraform fmt -check -recursive
+
+      - name: Init
+        working-directory: ${{ matrix.module }}
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Validate
+        working-directory: ${{ matrix.module }}
+        run: terraform validate -no-color
+
+      - name: Plan
+        id: plan
+        working-directory: ${{ matrix.module }}
+        run: |
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode -out=tfplan > plan.txt 2>&1
+          code=$?
+          cat plan.txt
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          test "$code" -ne 1
+
+      - name: Summarize plan
+        if: always()
+        working-directory: ${{ matrix.module }}
+        run: |
+          {
+            echo "## Terraform plan: ${{ matrix.module }}"
+            echo '```'
+            grep -E '^(Plan:|No changes|Error)' plan.txt || echo "See job log."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tfplan-${{ strategy.job-index }}
+          path: ${{ matrix.module }}/tfplan
+          if-no-files-found: ignore
+          retention-days: 7
+
+  apply:
+    name: Apply (${{ matrix.module }})
+    needs: plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Configure a required reviewer on the "production" environment to gate applies.
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - module: infra/terraform/internal-routes
+          - module: infra/terraform/ecs-services
+          - module: infra/terraform/secrets
+    env:
+      AWS_REGION: us-east-2
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.5.7
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.TF_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: terraform-apply-${{ github.run_id }}
+
+      - name: Require remote state backend
+        working-directory: ${{ matrix.module }}
+        run: |
+          if [ ! -f backend.hcl ]; then
+            echo "::error::$PWD has no backend.hcl. Move local state to S3 before applying."
+            exit 1
+          fi
+
+      - name: Init
+        working-directory: ${{ matrix.module }}
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      # Re-plan on the apply runner so the applied plan matches the current state, then apply it.
+      - name: Apply
+        working-directory: ${{ matrix.module }}
+        run: |
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false -auto-approve tfplan
