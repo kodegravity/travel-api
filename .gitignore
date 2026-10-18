@@ -25,3 +25,10 @@ application-secrets.yml
 # Logs and OS files
 *.log
 .DS_Store
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+**/terraform.tfvars
