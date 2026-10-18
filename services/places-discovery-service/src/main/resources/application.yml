@@ -36,7 +36,7 @@ google:
     # Only fields the app uses. Every field here is billed, so add new ones deliberately.
     field-mask: places.id,places.displayName,places.location,places.types
     # Hard cap on Google requests per UTC day, per task (cost control). Past it, searches return 503.
-    max-calls-per-day: ${GOOGLE_PLACES_MAX_CALLS_PER_DAY:200}
+    max-calls-per-day: ${GOOGLE_PLACES_MAX_CALLS_PER_DAY:190}
 
 management:
   endpoints:

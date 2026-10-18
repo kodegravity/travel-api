@@ -31,7 +31,7 @@ public record GooglePlacesProperties(
         @DefaultValue("5s") Duration readTimeout,
         @DefaultValue("20") @Min(1) @Max(20) int maxResultCount,
         @DefaultValue("places.id,places.displayName,places.location,places.types") String fieldMask,
-        @DefaultValue("200") @PositiveOrZero int maxCallsPerDay
+        @DefaultValue("190") @PositiveOrZero int maxCallsPerDay
 ) {
 
     @Override

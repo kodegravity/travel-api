@@ -36,7 +36,7 @@
         },
         {
           "name": "GOOGLE_PLACES_MAX_CALLS_PER_DAY",
-          "value": "200"
+          "value": "190"
         },
         {
           "name": "OKTA_ISSUER",

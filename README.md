@@ -56,9 +56,11 @@ Paid APIs are off by default. When enabled, each one has a hard daily cap per ru
 |---|---|---|---|
 | OpenAI calls per day | `TRAVEL_AI_MAX_CALLS_PER_DAY` | `300` | Falls back to deterministic ranking (users still get results) |
 | OpenAI output tokens per call | `TRAVEL_AI_MAX_TOKENS` | `500` | Response is cut off at the cap |
-| Google Places calls per day | `GOOGLE_PLACES_MAX_CALLS_PER_DAY` | `200` | Search returns 503 |
+| Google Places calls per day | `GOOGLE_PLACES_MAX_CALLS_PER_DAY` | `190` | Search returns 503 |
 
-The caps are per process, so with N tasks the effective limit is N times the value. Also set provider-side limits: a daily quota on the Places API in Google Cloud, plus a budget alert, and a prepaid balance with auto-recharge off in OpenAI.
+Budget: $100/month total (AWS + Google + OpenAI), at most $30/month each for Google and OpenAI. 190 Google calls/day stays within the 5,000 free monthly calls plus about $28 ($32 per 1,000 after that). 300 OpenAI calls/day with gpt-4o-mini is about $5/month at most.
+
+The caps are per process and reset when a task restarts, so with N tasks the effective limit is N times the value. Provider-side limits are the hard guarantee. Also set provider-side limits: a daily quota on the Places API in Google Cloud, plus a budget alert, and a prepaid balance with auto-recharge off in OpenAI.
 
 The AI engine also falls back to ranking when OpenAI errors or selects nothing usable, so an AI outage never hides eligible attractions.
 
