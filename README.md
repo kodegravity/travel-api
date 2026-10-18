@@ -1,6 +1,6 @@
 # ROAM / AI – AI Travel Companion (Backend)
 
-A location-aware travel assistant. A traveler shares their location, interests, budget, and available time, and gets up to three nearby attractions they can realistically fit in, refreshed automatically as they move (Active Travel Mode).
+A location-aware travel assistant. A traveler shares their location, interests, budget, and available time, and gets the nearby attractions they can realistically fit in, best first, refreshed automatically as they move (Active Travel Mode).
 
 The backend is three independent Spring Boot services. Each has its own `pom.xml`, Maven wrapper, Dockerfile, and image.
 
@@ -41,7 +41,7 @@ OKTA_ISSUER=https://<domain>.okta.com/oauth2/default OKTA_AUDIENCE=api://default
 | Allowed browser origins | travel-session | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` |
 | Recommendation service URL | travel-session | `RECOMMENDATION_SERVICE_BASE_URL` | `http://localhost:8081` |
 | Places service URL | recommendation | `PLACES_DISCOVERY_BASE_URL` | `http://localhost:8082` |
-| Search radius / walking speed / max results | recommendation | `RECOMMENDATION_SEARCH_RADIUS_KM`, `RECOMMENDATION_WALKING_SPEED_KMH`, `RECOMMENDATION_MAX_RESULTS` | `5`, `4.5`, `3` |
+| Search radius / walking speed / max results | recommendation | `RECOMMENDATION_SEARCH_RADIUS_KM`, `RECOMMENDATION_WALKING_SPEED_KMH`, `RECOMMENDATION_MAX_RESULTS` | `5`, `4.5`, `20` |
 | AI selection on/off | recommendation | `TRAVEL_AI_ENABLED` (needs `OPENAI_API_KEY`) | `false` |
 | AI model | recommendation | `TRAVEL_AI_MODEL` | `gpt-4o-mini` |
 | Session store | travel-session | `TRAVEL_SESSION_STORE` (`memory` or `dynamodb`), `TRAVEL_SESSION_TABLE` | `memory`, `roam-travel-sessions` |
@@ -86,7 +86,18 @@ Only `health` is exposed. Other actuator endpoints return 404 by design.
 
 `POST /api/v1/recommendations` (travel-session-service, `Content-Type: application/json`, `Authorization: Bearer <Okta access token>`)
 
-Eligibility: within the search radius (5 km, Haversine); at least one selected interest; known duration; walking time plus visit duration within `availableMinutes`; cost within `maxBudget` only when the currency matches the request. Attractions with an unknown cost are kept with a neutral budget score, and currency mismatches are not converted. Ranking uses interest 40%, distance 25%, budget 20%, time 15% (see `RecommendationRankingService`), with ties broken by attraction ID. At most 3 results are returned. Recommendation reasons are generated deterministically from known data.
+Eligibility: within the search radius (5 km, Haversine); at least one selected interest; known duration; walking time plus visit duration within `availableMinutes`; cost within `maxBudget` only when the currency matches the request. Attractions with an unknown cost are kept with a neutral budget score, and currency mismatches are not converted. Ranking uses interest 40%, distance 25%, budget 20%, time 15% (see `RecommendationRankingService`), with ties broken by attraction ID. Up to 20 results are returned (Google's maximum per search), best first, and the public endpoint pages them. Recommendation reasons are generated deterministically from known data.
+
+### Pagination
+
+`POST /api/v1/recommendations?page=0&size=20`
+
+| Parameter | Default | Rules |
+|---|---|---|
+| `page` | `0` | zero-based, >= 0 |
+| `size` | `20` | 1 to 50 |
+
+The response adds `page`, `size`, `totalElements`, and `totalPages` next to `recommendations`. A page past the end returns an empty list with the totals. Each page request runs the search again, which is one Google Places call when `ATTRACTION_PROVIDER=google`, so the default size returns a whole search in one call.
 
 ### Request
 
@@ -250,7 +261,7 @@ curl -s -X POST localhost:8080/api/v1/travel-sessions/$SESSION_ID/recommendation
 
 | `refreshStatus` | Meaning | `recommendations` |
 |---|---|---|
-| `UPDATED` | Providers were called and up to three unseen eligible attractions were selected. | Up to 3 items |
+| `UPDATED` | Providers were called and the unseen eligible attractions were selected. | Up to 20 items, not paged |
 | `UNCHANGED` | Refresh rules were not met. No provider or LLM call was made. | `[]` |
 | `NO_NEW_RESULTS` | A successful evaluation found no unseen eligible attractions. | `[]` |
 
@@ -270,7 +281,7 @@ curl -i -X DELETE localhost:8080/api/v1/travel-sessions/$SESSION_ID -H "Authoriz
 | Absolute lifetime cap | 120 min | `travel.session.max-lifetime-minutes` |
 | Minimum movement for an automatic refresh | 250 m | `travel.session.minimum-movement-meters` |
 | Minimum time between evaluations | 5 min | `travel.session.minimum-refresh-interval-minutes` |
-| Maximum recommendations per refresh | 3 (`recommendation.max-recommendations`) | |
+| Maximum recommendations per refresh | 20 (`recommendation.max-recommendations`) | |
 | Maximum concurrently active sessions | 100 | `travel.session.max-active-sessions` |
 | Expired-session retention before purge | 30 min | `travel.session.retention-after-expiry-minutes` |
 
@@ -278,7 +289,7 @@ Refresh runs only when both movement ≥ 250 m **and** elapsed time ≥ 5 min si
 
 ### Duplicate prevention
 
-Each session stores the IDs of attractions it has already recommended. Those IDs are excluded before ranking and the top-three cut, so the pipeline can select the next eligible candidates. When every eligible attraction has been shown, the response is `NO_NEW_RESULTS`. Public `POST /api/v1/recommendations` behaviour is unchanged.
+Each session stores the IDs of attractions it has already recommended. Those IDs are excluded before ranking and the result limit, so the pipeline can select the next eligible candidates. When every eligible attraction has been shown, the response is `NO_NEW_RESULTS`. Refresh responses are not paged, because every returned place is marked as seen. Public `POST /api/v1/recommendations` never excludes anything.
 
 ### Error responses
 

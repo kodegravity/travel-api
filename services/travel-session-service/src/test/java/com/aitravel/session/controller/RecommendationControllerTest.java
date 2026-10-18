@@ -137,6 +137,99 @@ class RecommendationControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.not(containsString("com.fasterxml"))));
     }
 
+    @Test
+    void defaultPageReturnsEveryResultWithPagingInfo() throws Exception {
+        givenRecommendations(25);
+
+        postJson(VALID_REQUEST)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations.length()").value(20))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(25))
+                .andExpect(jsonPath("$.totalPages").value(2));
+    }
+
+    @Test
+    void pageAndSizeSliceTheRankedList() throws Exception {
+        givenRecommendations(7);
+
+        postJsonPaged(VALID_REQUEST, "page=1&size=3")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations.length()").value(3))
+                .andExpect(jsonPath("$.recommendations[0].placeId").value("place-3"))
+                .andExpect(jsonPath("$.recommendations[2].placeId").value("place-5"))
+                .andExpect(jsonPath("$.totalElements").value(7))
+                .andExpect(jsonPath("$.totalPages").value(3));
+    }
+
+    @Test
+    void lastPageMayBeShort() throws Exception {
+        givenRecommendations(7);
+
+        postJsonPaged(VALID_REQUEST, "page=2&size=3")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations.length()").value(1))
+                .andExpect(jsonPath("$.recommendations[0].placeId").value("place-6"));
+    }
+
+    @Test
+    void pageBeyondTheEndIsEmptyButKeepsTotals() throws Exception {
+        givenRecommendations(4);
+
+        postJsonPaged(VALID_REQUEST, "page=5&size=2")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.totalPages").value(2));
+    }
+
+    @Test
+    void noResultsReportZeroPages() throws Exception {
+        givenRecommendations(0);
+
+        postJson(VALID_REQUEST)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0));
+    }
+
+    @Test
+    void negativePageReturnsBadRequest() throws Exception {
+        postJsonPaged(VALID_REQUEST, "page=-1")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.errors", hasKey("page")));
+    }
+
+    @Test
+    void sizeOutsideRangeReturnsBadRequest() throws Exception {
+        postJsonPaged(VALID_REQUEST, "size=0").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors", hasKey("size")));
+        postJsonPaged(VALID_REQUEST, "size=51").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors", hasKey("size")));
+    }
+
+    @Test
+    void nonNumericPageReturnsBadRequest() throws Exception {
+        postJsonPaged(VALID_REQUEST, "page=abc").andExpect(status().isBadRequest());
+    }
+
+    private void givenRecommendations(int count) {
+        List<RecommendationDto> items = java.util.stream.IntStream.range(0, count)
+                .mapToObj(i -> new RecommendationDto("place-" + i, "Place " + i, "HISTORY", null,
+                        new BigDecimal("41.89"), new BigDecimal("12.49"), 60, null, null, "https://maps.example/" + i))
+                .toList();
+        given(recommendationService.recommend(any(RecommendationRequest.class)))
+                .willReturn(new RecommendationResponse(items));
+    }
+
+    private ResultActions postJsonPaged(String body, String query) throws Exception {
+        return mockMvc.perform(post("/api/v1/recommendations?" + query)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
     private void assertValidationError(String body, String field) throws Exception {
         postJson(body)
                 .andExpect(status().isBadRequest())

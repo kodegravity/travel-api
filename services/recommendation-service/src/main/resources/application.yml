@@ -39,7 +39,8 @@ places:
 recommendation:
   search-radius-km: ${RECOMMENDATION_SEARCH_RADIUS_KM:5}
   walking-speed-kmh: ${RECOMMENDATION_WALKING_SPEED_KMH:4.5}
-  max-recommendations: ${RECOMMENDATION_MAX_RESULTS:3}
+  # Google returns at most 20 places per search, so 20 means "every eligible place". travel-session pages them.
+  max-recommendations: ${RECOMMENDATION_MAX_RESULTS:20}
 
 travel:
   warmup:

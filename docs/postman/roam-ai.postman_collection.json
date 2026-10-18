@@ -64,7 +64,7 @@
       ]
     },
     {
-      "name": "1. Recommendations near Rome (expect 200)",
+      "name": "1. Recommendations near Rome, page 0 (expect 200)",
       "request": {
         "method": "POST",
         "header": [
@@ -74,7 +74,7 @@
           }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/recommendations",
+          "raw": "{{baseUrl}}/api/v1/recommendations?page=0&size=20",
           "host": [
             "{{baseUrl}}"
           ],
@@ -82,9 +82,19 @@
             "api",
             "v1",
             "recommendations"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "20"
+            }
           ]
         },
-        "description": "One-shot recommendations. The mock provider only knows Rome, so Rome coordinates return results.",
+        "description": "One-shot recommendations, best first, paged with ?page= (from 0) and ?size= (1-50, default 20). Each page request is one Google Places call.",
         "body": {
           "mode": "raw",
           "raw": "{\n  \"location\": {\n    \"latitude\": 41.9028,\n    \"longitude\": 12.4964\n  },\n  \"interests\": [\n    \"HISTORY\",\n    \"ART\"\n  ],\n  \"maxBudget\": 50,\n  \"currencyCode\": \"EUR\",\n  \"availableMinutes\": 180\n}",
@@ -103,7 +113,7 @@
             "exec": [
               "pm.test('200 OK', () => pm.response.to.have.status(200));",
               "const body = pm.response.json();",
-              "pm.test('returns up to 3 recommendations', () => { pm.expect(body.recommendations).to.be.an('array'); pm.expect(body.recommendations.length).to.be.within(1, 3); });",
+              "pm.test('returns a page of recommendations with paging info', () => { pm.expect(body.recommendations).to.be.an('array').that.is.not.empty; pm.expect(body.page).to.eql(0); pm.expect(body.totalElements).to.be.at.least(body.recommendations.length); });",
               "pm.test('each has a Google Maps walking link', () => body.recommendations.forEach(r => pm.expect(r.mapsUrl).to.include('travelmode=walking')));",
               "console.log('Request ID for log lookup:', pm.response.headers.get('X-Request-Id'));"
             ]

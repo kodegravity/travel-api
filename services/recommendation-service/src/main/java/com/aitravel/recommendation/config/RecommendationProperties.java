@@ -17,6 +17,6 @@ import org.springframework.validation.annotation.Validated;
 public record RecommendationProperties(
         @DefaultValue("5") @Positive double searchRadiusKm,
         @DefaultValue("4.5") @Positive double walkingSpeedKmh,
-        @DefaultValue("3") @Positive int maxRecommendations
+        @DefaultValue("20") @Positive int maxRecommendations
 ) {
 }
