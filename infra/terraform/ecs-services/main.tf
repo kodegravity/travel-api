@@ -133,6 +133,8 @@ resource "aws_ecs_task_definition" "travel_session" {
         { name = "SERVER_PORT", value = "8080" },
         { name = "RECOMMENDATION_SERVICE_BASE_URL", value = "http://recommendation:8081" },
         { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
+        { name = "TRAVEL_SESSION_STORE", value = "dynamodb" },
+        { name = "TRAVEL_SESSION_TABLE", value = var.session_table_name },
       ], local.okta_env)
       stopTimeout    = 30
       mountPoints    = []
@@ -251,8 +253,14 @@ resource "aws_ecs_service" "travel_session" {
     container_port   = 8080
   }
 
+  # Registered as a server so API Gateway can find the task in Cloud Map (IP and port) through its VPC link.
   service_connect_configuration {
     enabled   = true
     namespace = var.service_connect_namespace_arn
+
+    service {
+      port_name      = "http"
+      discovery_name = "travel-session"
+    }
   }
 }

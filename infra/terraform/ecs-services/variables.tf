@@ -101,3 +101,9 @@ variable "service_connect_namespace_arn" {
   description = "Cloud Map namespace used by Service Connect."
   type        = string
 }
+
+variable "session_table_name" {
+  description = "DynamoDB session table (see ../session-store)."
+  type        = string
+  default     = "roam-travel-sessions"
+}
