@@ -1,22 +1,36 @@
 # Postman Testing Guide
 
-This guide covers manual API testing for the three backend services in `services/`. Use the sample session ID below for the refresh request, or replace it with a session you created.
+Manual API testing against the deployed stack. The only public entry point is API Gateway (HTTPS). recommendation-service and places-discovery-service have no public route; test them locally (sections 3 and 4 with `localhost` URLs).
 
-## 1. Environment Setup
+## 1. Setup
 
-Create a Postman environment with these variables:
+**Import** (Postman → Import) both files from `docs/postman/`:
 
-| Variable | Sample value | Notes |
-|---|---|---|
-| `baseUrl` | `http://ai-travel-app-alb-179383308.us-east-2.elb.amazonaws.com` | Public API (travel-session-service). |
-| `accessToken` | (paste value) | Okta access token. Never commit it. |
-| `sessionId` | `32a47ac1-5746-431b-bb81-b4a668a876cd` | Sample. Replace with the `sessionId` from the create response. |
+- `roam-ai.postman_collection.json`: 8 requests with test scripts, run in order (0 → 7).
+- `roam-ai-aws.postman_environment.json`: `baseUrl` = `https://t1mmzzwy99.execute-api.us-east-2.amazonaws.com`, `accessToken` empty.
 
-**Authorization:** For every `/api/v1/**` request, set Authorization to **Bearer Token** with `{{accessToken}}`. Requests without a valid token return `401`. A session owned by another user returns `404`.
+Select the **ROAM / AI – AWS (API Gateway)** environment.
 
-**Content-Type:** Set `application/json` on every request that has a body.
+**Get an Okta access token** (expires after about 1 hour):
 
-**Internal services:** `/internal/v1/**` requires the same Okta Bearer token as the public API (`{{accessToken}}`). Routing through the ALB is required before these work from outside; see `docs/ECS_DEPLOYMENT.md` for the listener and target group setup.
+- **Option A, from the web app:** log in at `http://localhost:5173`, open DevTools → Application → Session Storage → `http://localhost:5173` → `okta-token-storage`, and copy `accessToken.accessToken` (a long string starting with `eyJ`). Paste it into the environment's `accessToken` (current value).
+- **Option B, in Postman:** collection → Authorization → OAuth 2.0, grant type *Authorization Code (With PKCE)*, Auth URL `<OKTA_ISSUER>/v1/authorize`, Access Token URL `<OKTA_ISSUER>/v1/token`, the SPA client ID, scope `openid profile email`, *Authorize using browser*. Add `https://oauth.pstmn.io/v1/callback` to the Okta app's sign-in redirect URIs first.
+
+The token's `aud` must equal the API's `OKTA_AUDIENCE`, or API Gateway returns `401`.
+
+**Run:** collection → Run → keep the order. Every request should pass its tests. Each response carries `X-Request-Id`, which links the request across the logs of all three services in Datadog.
+
+| Variable | Notes |
+|---|---|
+| `baseUrl` | API Gateway URL (environment) |
+| `accessToken` | Okta access token. Keep it as a secret variable and never commit or export it. |
+| `sessionId` | Set automatically by request 2 (collection variable) |
+
+**Authorization:** every `/api/v1/**` request uses Bearer `{{accessToken}}` (set on the collection). Requests without a valid token get `401` from API Gateway. API Gateway's `401` has no CORS headers, so a browser reports it as a CORS error. A session owned by another user returns `404`.
+
+**Content-Type:** `application/json` on every request that has a body.
+
+**Rate limit:** API Gateway allows 5 requests per second (burst 10). Faster runs get `429`.
 
 ## 2. Public API (travel-session-service)
 
@@ -58,7 +72,7 @@ pm.test("Session created", () => {
 
 - **Method:** `POST`
 - **URL:** `{{baseUrl}}/api/v1/travel-sessions/{{sessionId}}/recommendations`
-- **Sample URL:** `http://ai-travel-app-alb-179383308.us-east-2.elb.amazonaws.com/api/v1/travel-sessions/32a47ac1-5746-431b-bb81-b4a668a876cd/recommendations`
+- **Sample URL:** `{{baseUrl}}/api/v1/travel-sessions/32a47ac1-5746-431b-bb81-b4a668a876cd/recommendations`
 - **Auth:** Bearer `{{accessToken}}`
 
 Body:
@@ -115,7 +129,7 @@ Expected: `200 OK` with `{ "recommendations": [...] }`.
 
 ## 3. Internal API: Recommendation Service
 
-Called by travel-session-service. Routed through the ALB only if `/internal/**` is added.
+Called by travel-session-service. Not exposed publicly; run the service locally to test it directly.
 
 ### 3.1 Search recommendations
 
@@ -145,7 +159,7 @@ Expected: `200 OK` with `{ "recommendations": [...] }`. `excludedPlaceIds` is op
 
 ## 4. Internal API: Places Discovery Service
 
-Called by recommendation-service. Routed through the ALB only if `/internal/**` is added.
+Called by recommendation-service. Not exposed publicly; run the service locally to test it directly.
 
 ### 4.1 Search nearby attractions
 
@@ -196,5 +210,4 @@ All errors use RFC 9457 `application/problem+json`.
 ## Notes
 
 - Do not put real tokens in exported Postman collections.
-- The ALB host above is taken from the request provided. Whether the ALB routes to all three services is UNVERIFIED.
 - Internal endpoint requests were written from the controller and DTO source. They were not sent against a running service in this document.

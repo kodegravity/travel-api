@@ -1,0 +1,392 @@
+{
+  "info": {
+    "_postman_id": "7bc306b9-7a39-42c8-9b4a-5ca5becd28d9",
+    "name": "ROAM / AI \u2013 API Gateway",
+    "description": "Public API through API Gateway (HTTPS). Set accessToken in the environment to an Okta access token (see docs/POSTMAN_TESTING.md). Run the folder in order with the Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "0. No token is rejected (expect 401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/recommendations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "recommendations"
+          ]
+        },
+        "description": "Sanity check: the JWT authorizer at API Gateway blocks unauthenticated calls.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"location\": {\n    \"latitude\": 41.9028,\n    \"longitude\": 12.4964\n  },\n  \"interests\": [\n    \"HISTORY\",\n    \"ART\"\n  ],\n  \"maxBudget\": 50,\n  \"currencyCode\": \"EUR\",\n  \"availableMinutes\": 180\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('API Gateway rejects a request without a token', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Recommendations near Rome (expect 200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/recommendations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "recommendations"
+          ]
+        },
+        "description": "One-shot recommendations. The mock provider only knows Rome, so Rome coordinates return results.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"location\": {\n    \"latitude\": 41.9028,\n    \"longitude\": 12.4964\n  },\n  \"interests\": [\n    \"HISTORY\",\n    \"ART\"\n  ],\n  \"maxBudget\": 50,\n  \"currencyCode\": \"EUR\",\n  \"availableMinutes\": 180\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('returns up to 3 recommendations', () => { pm.expect(body.recommendations).to.be.an('array'); pm.expect(body.recommendations.length).to.be.within(1, 3); });",
+              "pm.test('each has a Google Maps walking link', () => body.recommendations.forEach(r => pm.expect(r.mapsUrl).to.include('travelmode=walking')));",
+              "console.log('Request ID for log lookup:', pm.response.headers.get('X-Request-Id'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Start Active Travel Mode session (expect 201)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/travel-sessions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "travel-sessions"
+          ]
+        },
+        "description": "Creates a session stored in DynamoDB (roam-travel-sessions). Saves sessionId for the next requests.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"interests\": [\n    \"HISTORY\",\n    \"ART\"\n  ],\n  \"maxBudget\": 50,\n  \"currencyCode\": \"EUR\",\n  \"availableMinutes\": 180\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test('session is ACTIVE', () => pm.expect(body.status).to.eql('ACTIVE'));",
+              "pm.collectionVariables.set('sessionId', body.sessionId);",
+              "console.log('sessionId:', body.sessionId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. First refresh (expect 200 UPDATED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/travel-sessions/{{sessionId}}/recommendations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "travel-sessions",
+            "{{sessionId}}",
+            "recommendations"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"location\": {\n    \"latitude\": 41.9028,\n    \"longitude\": 12.4964\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('first refresh always updates', () => pm.expect(body.refreshStatus).to.eql('UPDATED'));",
+              "pm.collectionVariables.set('firstPlaceIds', JSON.stringify(body.recommendations.map(r => r.placeId)));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Immediate second refresh (expect 200 UNCHANGED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/travel-sessions/{{sessionId}}/recommendations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "travel-sessions",
+            "{{sessionId}}",
+            "recommendations"
+          ]
+        },
+        "description": "Within 5 minutes and under 250 m of movement, the backend skips the refresh and calls no provider.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"location\": {\n    \"latitude\": 41.9028,\n    \"longitude\": 12.4964\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('cooldown and 250 m rule skip the refresh (no paid API calls)', () => pm.expect(pm.response.json().refreshStatus).to.eql('UNCHANGED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Stop session (expect 204)",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/travel-sessions/{{sessionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "travel-sessions",
+            "{{sessionId}}"
+          ]
+        },
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Refresh after stop (expect 409)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/travel-sessions/{{sessionId}}/recommendations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "travel-sessions",
+            "{{sessionId}}",
+            "recommendations"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"location\": {\n    \"latitude\": 41.9028,\n    \"longitude\": 12.4964\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('409 Conflict: session stopped', () => pm.response.to.have.status(409));",
+              "pm.test('ProblemDetail title', () => pm.expect(pm.response.json().title).to.eql('Travel session stopped'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Validation error (expect 400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/recommendations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "recommendations"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"location\": {\n    \"latitude\": 200,\n    \"longitude\": 12.4964\n  },\n  \"interests\": [\n    \"HISTORY\",\n    \"ART\"\n  ],\n  \"maxBudget\": 50,\n  \"currencyCode\": \"EUR\",\n  \"availableMinutes\": 180\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+              "pm.test('field error for latitude', () => pm.expect(pm.response.json().errors).to.have.property('location.latitude'));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "firstPlaceIds",
+      "value": ""
+    }
+  ]
+}
