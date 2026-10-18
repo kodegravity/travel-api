@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -40,6 +41,8 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
     private final GooglePlaceDetailsProperties details;
     private final DailyCallLimiter dailyCallLimiter;
 
+    // Two constructors: Spring must be told which one to use.
+    @Autowired
     public GooglePlaceDetailsProvider(RestClient googlePlacesRestClient, GooglePlacesProperties places,
                                       GooglePlaceDetailsProperties details) {
         this(googlePlacesRestClient, places, details, Clock.systemUTC());

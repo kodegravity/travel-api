@@ -54,11 +54,12 @@ resource "aws_ecs_task_definition" "places_discovery" {
       volumesFrom    = []
       systemControls = []
       healthCheck = {
-        command     = ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8082/actuator/health || exit 1"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 30
+        command  = ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8082/actuator/health || exit 1"]
+        interval = 30
+        timeout  = 5
+        retries  = 3
+        # JVM startup takes 70-90 s on 0.25 vCPU; failed checks inside this window do not count.
+        startPeriod = 150
       }
       logConfiguration = {
         logDriver = "awslogs"
@@ -114,7 +115,7 @@ resource "aws_ecs_task_definition" "recommendation" {
         interval    = 30
         timeout     = 5
         retries     = 3
-        startPeriod = 30
+        startPeriod = 150
       }
       logConfiguration = {
         logDriver = "awslogs"
@@ -167,7 +168,7 @@ resource "aws_ecs_task_definition" "travel_session" {
         interval    = 30
         timeout     = 5
         retries     = 3
-        startPeriod = 30
+        startPeriod = 150
       }
       logConfiguration = {
         logDriver = "awslogs"
