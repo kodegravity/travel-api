@@ -35,6 +35,14 @@ travel:
     retention-after-expiry-minutes: ${TRAVEL_SESSION_RETENTION_MINUTES:30}
     max-active-sessions: ${TRAVEL_SESSION_MAX_ACTIVE:100}
     cleanup-interval-ms: ${TRAVEL_SESSION_CLEANUP_INTERVAL_MS:60000}
+    refresh-lease-seconds: ${TRAVEL_SESSION_REFRESH_LEASE_SECONDS:30}
+    # "memory" (default, single task, lost on restart) or "dynamodb" (shared, survives restarts).
+    store: ${TRAVEL_SESSION_STORE:memory}
+    dynamodb:
+      table-name: ${TRAVEL_SESSION_TABLE:roam-travel-sessions}
+      # Blank uses AWS_REGION. Set the endpoint only for DynamoDB Local, e.g. http://localhost:8000.
+      region: ${TRAVEL_SESSION_DYNAMODB_REGION:}
+      endpoint: ${TRAVEL_SESSION_DYNAMODB_ENDPOINT:}
 
 management:
   endpoints:

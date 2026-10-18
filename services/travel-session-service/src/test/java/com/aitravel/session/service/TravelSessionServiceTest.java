@@ -78,7 +78,7 @@ class TravelSessionServiceTest {
     }
 
     private static TravelSessionProperties defaultProperties(int maxActive) {
-        return new TravelSessionProperties(250, 5, 30, 120, 30, maxActive);
+        return new TravelSessionProperties(250, 5, 30, 120, 30, maxActive, 30);
     }
 
     private UUID createSession() {

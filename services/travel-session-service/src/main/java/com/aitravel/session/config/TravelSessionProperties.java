@@ -16,6 +16,8 @@ import org.springframework.validation.annotation.Validated;
  * @param maxLifetimeMinutes             absolute session lifetime, regardless of activity
  * @param retentionAfterExpiryMinutes    how long an expired or stopped session is kept so the API can answer 410/409
  * @param maxActiveSessions              capacity limit for concurrently active sessions
+ * @param refreshLeaseSeconds            how long a refresh holds its per-session lease if it never releases it
+ *                                       (task crash); keep it above the recommendation service read timeout
  */
 @Validated
 @ConfigurationProperties(prefix = "travel.session")
@@ -25,7 +27,8 @@ public record TravelSessionProperties(
         @DefaultValue("30") @Positive int inactivityTimeoutMinutes,
         @DefaultValue("120") @Positive int maxLifetimeMinutes,
         @DefaultValue("30") @PositiveOrZero int retentionAfterExpiryMinutes,
-        @DefaultValue("100") @Min(1) int maxActiveSessions
+        @DefaultValue("100") @Min(1) int maxActiveSessions,
+        @DefaultValue("30") @Positive int refreshLeaseSeconds
 ) {
 
     public TravelSessionProperties {

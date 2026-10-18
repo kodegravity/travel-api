@@ -44,6 +44,7 @@ OKTA_ISSUER=https://<domain>.okta.com/oauth2/default OKTA_AUDIENCE=api://default
 | Search radius / walking speed / max results | recommendation | `RECOMMENDATION_SEARCH_RADIUS_KM`, `RECOMMENDATION_WALKING_SPEED_KMH`, `RECOMMENDATION_MAX_RESULTS` | `5`, `4.5`, `3` |
 | AI selection on/off | recommendation | `TRAVEL_AI_ENABLED` (needs `OPENAI_API_KEY`) | `false` |
 | AI model | recommendation | `TRAVEL_AI_MODEL` | `gpt-4o-mini` |
+| Session store | travel-session | `TRAVEL_SESSION_STORE` (`memory` or `dynamodb`), `TRAVEL_SESSION_TABLE` | `memory`, `roam-travel-sessions` |
 | Attraction provider | places-discovery | `ATTRACTION_PROVIDER` (`mock` or `google`, needs `GOOGLE_PLACES_API_KEY`) | `mock` |
 
 Secrets are supplied through environment variables (Secrets Manager on ECS) and are never logged or committed.
@@ -198,7 +199,7 @@ Tests: `./mvnw clean verify` uses the mock provider and mocks Google HTTP with `
 
 ## Active Travel Mode
 
-A traveler starts a short-lived session with preferences, then sends their location whenever the web page has permission to share it. The backend does not track the device. Session state lives only in memory, and restarting the application removes all active sessions.
+A traveler starts a short-lived session with preferences, then sends their location whenever the web page has permission to share it. The backend does not track the device.
 
 ### Session lifecycle
 
@@ -292,14 +293,33 @@ All errors use RFC 9457 `application/problem+json`.
 | Expired session within retention | 410 |
 | Stopped session on refresh | 409 |
 | Refresh already in progress for this session | 409 |
+| Session changed by another request at the same moment (retry) | 409 |
 | Session capacity reached | 503 |
 | Recommendation provider unavailable | 503 |
 
 Responses never include stack traces, API keys, or coordinates.
 
+### Session store
+
+| `TRAVEL_SESSION_STORE` | Behaviour |
+|---|---|
+| `memory` (default) | Process-local. Fine for local development and a single task. Sessions are lost on restart. |
+| `dynamodb` | Table `TRAVEL_SESSION_TABLE` (partition key `sessionId`, on-demand, TTL on `purgeAt`). Sessions survive restarts and any task can serve any request. |
+
+DynamoDB writes are conditional on a `version` attribute, so a stale copy never overwrites a newer change such as a stop. The one-refresh-at-a-time rule is enforced across tasks with a lease (`TRAVEL_SESSION_REFRESH_LEASE_SECONDS`, default 30) that expires on its own if a task dies mid-refresh. Stopped and expired sessions keep no preferences or location, and DynamoDB TTL deletes them after the retention window.
+
+The table and the task's IAM role are defined in `infra/terraform/session-store`. The integration tests run against DynamoDB Local:
+
+```bash
+docker run -d --rm -p 8000:8000 amazon/dynamodb-local:2.6.1 -jar DynamoDBLocal.jar -inMemory
+DYNAMODB_TEST_ENDPOINT=http://localhost:8000 ./mvnw test   # in services/travel-session-service
+```
+
+Without `DYNAMODB_TEST_ENDPOINT` those tests are skipped. CI runs them with a DynamoDB Local service container.
+
 ### Concurrency and expiry
 
-- Only one refresh per session can run at a time. A second concurrent refresh gets `409`.
+- Only one refresh per session can run at a time, across all tasks. A second concurrent refresh gets `409`.
 - Provider calls run without holding a lock.
 - A stop or expiry that happens during a refresh discards the refresh result.
 - A scheduled job (`travel.session.cleanup-interval-ms`, default 60 s) removes expired sessions past retention.
@@ -314,7 +334,8 @@ Tests use a controllable `Clock` (`support/MutableClock`) and mock the recommend
 
 ### Limitations
 
-- Sessions are in memory only. Restarting the application ends all sessions. Use a shared store (for example Redis) before running multiple instances.
+- With the default `memory` store, restarting ends all sessions and sessions are not shared between tasks. Use `TRAVEL_SESSION_STORE=dynamodb` for deployments (see Session store).
+- The DynamoDB capacity check is not atomic across tasks, so simultaneous creates can exceed `max-active-sessions` by a few.
 - Every endpoint requires an Okta access token, and a session is visible only to the user (`sub`) who created it.
 - Expired tombstones are retained until the retention period ends. Total memory is bounded by creation rate, not by active session count alone.
 - When `TRAVEL_AI_ENABLED=true`, refreshes also go through the AI engine, so each `UPDATED` refresh can cost one Google call and one OpenAI call. `UNCHANGED` refreshes cost nothing.

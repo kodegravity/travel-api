@@ -6,14 +6,18 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /**
- * Process-local session store. Restarting the application removes all sessions. Lookups are lock-free.
- * Capacity checks and purges take a short store-wide lock, held only for in-memory bookkeeping and never
- * during external calls.
+ * Process-local session store, the default ({@code travel.session.store=memory}). Restarting the application
+ * removes all sessions, and sessions are not shared between tasks. Lookups are lock-free. Capacity checks and
+ * purges take a short store-wide lock, held only for in-memory bookkeeping and never during external calls.
+ *
+ * <p>The store hands out the live session objects, so {@link #save} has nothing to write and always succeeds.
  */
 @Repository
+@ConditionalOnProperty(prefix = "travel.session", name = "store", havingValue = "memory", matchIfMissing = true)
 public class InMemoryTravelSessionRepository implements TravelSessionRepository {
 
     private final ConcurrentHashMap<UUID, TravelSession> sessions = new ConcurrentHashMap<>();
@@ -33,6 +37,21 @@ public class InMemoryTravelSessionRepository implements TravelSessionRepository 
         }
         sessions.put(session.sessionId(), session);
         return true;
+    }
+
+    @Override
+    public boolean save(TravelSession session, Duration retentionAfterExpiry) {
+        return sessions.get(session.sessionId()) == session;
+    }
+
+    @Override
+    public boolean tryBeginRefresh(TravelSession session, Instant now, Duration lease) {
+        return session.tryBeginRefresh();
+    }
+
+    @Override
+    public void endRefresh(TravelSession session) {
+        session.endRefresh();
     }
 
     @Override

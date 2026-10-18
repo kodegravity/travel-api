@@ -23,6 +23,12 @@ jobs:
     name: Build and test (${{ matrix.service }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # DynamoDB Local for the travel-session store tests. Other services ignore it.
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:2.6.1
+        ports:
+          - 8000:8000
     strategy:
       fail-fast: true
       matrix:
@@ -56,6 +62,8 @@ jobs:
 
       - name: Build and test
         working-directory: services/${{ matrix.service }}
+        env:
+          DYNAMODB_TEST_ENDPOINT: http://localhost:8000
         run: ./mvnw -B -ntp clean verify
 
       - name: Summarize test results

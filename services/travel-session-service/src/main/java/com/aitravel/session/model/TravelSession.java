@@ -12,9 +12,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Temporary Active Travel Mode session.
  *
- * <p>Holds preferences, the last evaluated location, and recommended place IDs, and nothing else. Restarting
- * the application discards every session. Mutable state is guarded by this object's monitor. The refresh guard
- * is a separate atomic flag, so a slow provider call never holds the session lock.
+ * <p>Holds preferences, the last evaluated location, and recommended place IDs, and nothing else. Mutable state is
+ * guarded by this object's monitor. The refresh guard is a separate atomic flag, so a slow provider call never holds
+ * the session lock.
+ *
+ * <p>{@link #version()} supports optimistic locking in shared stores: a store saves a session only if the stored
+ * version still matches, then calls {@link #markSaved(long)}. {@link #state()} and {@link #restore(State)} convert
+ * to and from the persisted form.
  */
 public final class TravelSession {
 
@@ -37,6 +41,7 @@ public final class TravelSession {
     private Location lastEvaluatedLocation;
     private Instant lastRecommendationTime;
     private final Set<String> recommendedPlaceIds = new HashSet<>();
+    private long version;
 
     public TravelSession(UUID sessionId, String ownerSubject, Set<Interest> interests, BigDecimal maxBudget, String currencyCode,
                          Integer availableMinutes, Instant now, Duration inactivityTimeout, Duration maxLifetime) {
@@ -51,6 +56,47 @@ public final class TravelSession {
         this.inactivityTimeout = inactivityTimeout;
         this.hardExpiresAt = now.plus(maxLifetime);
         this.expiresAt = expiryAfter(now);
+    }
+
+    private TravelSession(State state) {
+        this.sessionId = state.sessionId();
+        this.ownerSubject = state.ownerSubject();
+        this.createdAt = state.createdAt();
+        this.inactivityTimeout = state.inactivityTimeout();
+        this.hardExpiresAt = state.hardExpiresAt();
+        this.interests = Set.copyOf(state.interests());
+        this.maxBudget = state.maxBudget();
+        this.currencyCode = state.currencyCode();
+        this.availableMinutes = state.availableMinutes();
+        this.status = state.status();
+        this.lastActivityAt = state.lastActivityAt();
+        this.expiresAt = state.expiresAt();
+        this.lastEvaluatedLocation = state.lastEvaluatedLocation();
+        this.lastRecommendationTime = state.lastRecommendationTime();
+        this.recommendedPlaceIds.addAll(state.recommendedPlaceIds());
+        this.version = state.version();
+    }
+
+    /** Rebuilds a session read from a store. The refresh guard starts released; stores manage their own lease. */
+    public static TravelSession restore(State state) {
+        return new TravelSession(state);
+    }
+
+    /** Full persisted form of this session, including its version. */
+    public synchronized State state() {
+        return new State(sessionId, ownerSubject, createdAt, inactivityTimeout, hardExpiresAt, interests, maxBudget,
+                currencyCode, availableMinutes, status, lastActivityAt, expiresAt, lastEvaluatedLocation,
+                lastRecommendationTime, Set.copyOf(recommendedPlaceIds), version);
+    }
+
+    /** Version this copy was read at. 0 means it has never been stored. */
+    public synchronized long version() {
+        return version;
+    }
+
+    /** Records that a store saved this copy as {@code newVersion}. */
+    public synchronized void markSaved(long newVersion) {
+        this.version = newVersion;
     }
 
     public UUID sessionId() {
@@ -153,6 +199,27 @@ public final class TravelSession {
         lastEvaluatedLocation = null;
         lastRecommendationTime = null;
         recommendedPlaceIds.clear();
+    }
+
+    /** Everything a store needs to persist and rebuild a session. */
+    public record State(
+            UUID sessionId,
+            String ownerSubject,
+            Instant createdAt,
+            Duration inactivityTimeout,
+            Instant hardExpiresAt,
+            Set<Interest> interests,
+            BigDecimal maxBudget,
+            String currencyCode,
+            Integer availableMinutes,
+            TravelSessionStatus status,
+            Instant lastActivityAt,
+            Instant expiresAt,
+            Location lastEvaluatedLocation,
+            Instant lastRecommendationTime,
+            Set<String> recommendedPlaceIds,
+            long version
+    ) {
     }
 
     /** Immutable view of a session's state at one point in time. */

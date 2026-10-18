@@ -22,7 +22,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -36,6 +38,7 @@ import org.springframework.stereotype.Service;
 public class TravelSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(TravelSessionService.class);
+    private static final int MAX_UPDATE_ATTEMPTS = 3;
 
     private final TravelSessionRepository repository;
     private final RecommendationService recommendationService;
@@ -80,7 +83,7 @@ public class TravelSessionService {
         TravelSession session = requireActive(sessionId, ownerSubject, now);
 
         log.debug("Refresh requested sessionId={}", sessionId);
-        if (!session.tryBeginRefresh()) {
+        if (!repository.tryBeginRefresh(session, now, refreshLease())) {
             log.info("Refresh rejected, another refresh is in progress sessionId={}", sessionId);
             throw new TravelSessionException(Reason.REFRESH_IN_PROGRESS);
         }
@@ -90,7 +93,9 @@ public class TravelSessionService {
 
             if (!shouldRefresh(snapshot, current, now)) {
                 // Skipped refreshes extend the session but do not move the movement baseline or cooldown clock.
+                // Best effort: if another request changed the session meanwhile, its write wins.
                 session.touch(now);
+                repository.save(session, retention());
                 log.info("Refresh skipped sessionId={} reason=movement-or-cooldown-not-met status=UNCHANGED", sessionId);
                 return response(sessionId, RefreshStatus.UNCHANGED, List.of(), now);
             }
@@ -120,15 +125,16 @@ public class TravelSessionService {
                     .toList();
 
             // A stop or expiry that happened during the provider call discards this result.
-            if (!session.recordEvaluation(current, now, placeIds)) {
+            Update recorded = update(session, s -> s.recordEvaluation(current, now, placeIds));
+            if (!recorded.applied()) {
                 log.info("Refresh result discarded, session ended during provider call sessionId={}", sessionId);
-                throw stateException(session, now);
+                throw stateException(recorded.latest(), now);
             }
             RefreshStatus status = recommendations.isEmpty() ? RefreshStatus.NO_NEW_RESULTS : RefreshStatus.UPDATED;
             log.info("Refresh completed sessionId={} status={} count={}", sessionId, status, recommendations.size());
             return response(sessionId, status, recommendations, now);
         } finally {
-            session.endRefresh();
+            repository.endRefresh(session);
         }
     }
 
@@ -136,12 +142,19 @@ public class TravelSessionService {
     public void stop(UUID sessionId, String ownerSubject) {
         Instant now = clock.instant();
         TravelSession session = find(sessionId, ownerSubject);
-        session.expireIfDue(now);
-        if (session.status() == TravelSessionStatus.EXPIRED) {
+        Update stopped = update(session, s -> {
+            s.expireIfDue(now);
+            if (s.status() == TravelSessionStatus.EXPIRED) {
+                return false;
+            }
+            s.stop();
+            return true;
+        });
+        if (!stopped.applied()) {
+            persistExpiry(stopped.latest());
             log.info("Stop rejected, session already expired sessionId={}", sessionId);
             throw new TravelSessionException(Reason.EXPIRED);
         }
-        session.stop();
         log.info("Travel session stopped sessionId={} owner={}", sessionId, LogIds.subject(ownerSubject));
     }
 
@@ -175,7 +188,11 @@ public class TravelSessionService {
 
     private TravelSession requireActive(UUID sessionId, String ownerSubject, Instant now) {
         TravelSession session = find(sessionId, ownerSubject);
+        TravelSessionStatus before = session.status();
         session.expireIfDue(now);
+        if (before == TravelSessionStatus.ACTIVE && session.status() == TravelSessionStatus.EXPIRED) {
+            persistExpiry(session);
+        }
         if (session.status() != TravelSessionStatus.ACTIVE) {
             log.info("Request rejected, session is not active sessionId={} status={}", sessionId, session.status());
             throw stateException(session, now);
@@ -199,7 +216,46 @@ public class TravelSessionService {
         return session;
     }
 
+    /**
+     * Applies {@code change} and saves it. If another request saved the session first, re-reads it and applies the
+     * change again to the latest state, a few times at most. {@code change} returns false when it no longer
+     * applies (for example the session has ended); nothing is saved then.
+     */
+    private Update update(TravelSession session, Predicate<TravelSession> change) {
+        TravelSession current = session;
+        for (int attempt = 1; attempt <= MAX_UPDATE_ATTEMPTS; attempt++) {
+            if (!change.test(current)) {
+                return new Update(false, current);
+            }
+            if (repository.save(current, retention())) {
+                return new Update(true, current);
+            }
+            log.info("Session changed concurrently, retrying sessionId={} attempt={}", current.sessionId(), attempt);
+            Optional<TravelSession> latest = repository.findById(current.sessionId());
+            if (latest.isEmpty()) {
+                return new Update(false, null);
+            }
+            current = latest.get();
+        }
+        log.warn("Session update gave up after {} concurrent changes sessionId={}", MAX_UPDATE_ATTEMPTS,
+                session.sessionId());
+        throw new TravelSessionException(Reason.CONCURRENT_UPDATE);
+    }
+
+    /** Writes an EXPIRED transition, which also wipes the stored preferences and location. Best effort. */
+    private void persistExpiry(TravelSession session) {
+        if (session != null && session.status() == TravelSessionStatus.EXPIRED) {
+            repository.save(session, retention());
+        }
+    }
+
+    private record Update(boolean applied, TravelSession latest) {
+    }
+
     private TravelSessionException stateException(TravelSession session, Instant now) {
+        if (session == null) {
+            return new TravelSessionException(Reason.EXPIRED);
+        }
         session.expireIfDue(now);
         return session.status() == TravelSessionStatus.STOPPED
                 ? new TravelSessionException(Reason.STOPPED)
@@ -217,6 +273,10 @@ public class TravelSessionService {
 
     private Duration maxLifetime() {
         return Duration.ofMinutes(properties.maxLifetimeMinutes());
+    }
+
+    private Duration refreshLease() {
+        return Duration.ofSeconds(properties.refreshLeaseSeconds());
     }
 
     private Duration retention() {

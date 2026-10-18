@@ -18,7 +18,9 @@ public class TravelSessionException extends RuntimeException {
         REFRESH_IN_PROGRESS(HttpStatus.CONFLICT, "Refresh already in progress",
                 "A recommendation refresh is already running for this session. Retry after it completes."),
         CAPACITY_REACHED(HttpStatus.SERVICE_UNAVAILABLE, "Travel session capacity reached",
-                "The service is at its active session limit. Please try again later.");
+                "The service is at its active session limit. Please try again later."),
+        CONCURRENT_UPDATE(HttpStatus.CONFLICT, "Travel session busy",
+                "The travel session was changed by another request at the same time. Retry the request.");
 
         private final HttpStatus status;
         private final String title;
