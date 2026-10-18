@@ -95,3 +95,52 @@ variable "session_table_name" {
   type        = string
   default     = "roam-travel-sessions"
 }
+
+# Paid providers. Both are off by default; turning one on is a cost decision (budget: $30/month each).
+
+variable "attraction_provider" {
+  description = "places-discovery provider: \"mock\" (free) or \"google\" (paid; needs a value in the Google secret)."
+  type        = string
+  default     = "mock"
+
+  validation {
+    condition     = contains(["mock", "google"], var.attraction_provider)
+    error_message = "attraction_provider must be \"mock\" or \"google\"."
+  }
+}
+
+variable "ai_enabled" {
+  description = "Enable OpenAI selection in recommendation (paid; needs a value in the OpenAI secret)."
+  type        = bool
+  default     = false
+}
+
+variable "google_places_max_calls_per_day" {
+  description = "Hard cap on Google Places calls per UTC day per task. 190 keeps Google under $30/month."
+  type        = number
+  default     = 190
+}
+
+variable "ai_max_calls_per_day" {
+  description = "Hard cap on OpenAI calls per UTC day per task. Past it, deterministic ranking is used."
+  type        = number
+  default     = 300
+}
+
+variable "ai_max_tokens" {
+  description = "Maximum output tokens per OpenAI call."
+  type        = number
+  default     = 500
+}
+
+variable "google_places_api_key_secret_name" {
+  description = "Secrets Manager secret holding the Google Places API key (see ../secrets)."
+  type        = string
+  default     = "ai-travel-app/google-places-api-key"
+}
+
+variable "openai_api_key_secret_name" {
+  description = "Secrets Manager secret holding the OpenAI API key (see ../secrets)."
+  type        = string
+  default     = "ai-travel-app/openai-api-key"
+}

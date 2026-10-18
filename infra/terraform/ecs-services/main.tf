@@ -1,3 +1,12 @@
+# API key secrets created by ../secrets. Values are set out of band, so they never enter Terraform state.
+data "aws_secretsmanager_secret" "google_places_api_key" {
+  name = var.google_places_api_key_secret_name
+}
+
+data "aws_secretsmanager_secret" "openai_api_key" {
+  name = var.openai_api_key_secret_name
+}
+
 data "aws_ecs_cluster" "this" {
   cluster_name = var.cluster_name
 }
@@ -31,10 +40,15 @@ resource "aws_ecs_task_definition" "places_discovery" {
       portMappings = [{ name = "http", containerPort = 8082, hostPort = 8082, protocol = "tcp", appProtocol = "http" }]
       environment = concat([
         { name = "SERVER_PORT", value = "8082" },
-        { name = "ATTRACTION_PROVIDER", value = "mock" },
+        { name = "ATTRACTION_PROVIDER", value = var.attraction_provider },
+        { name = "GOOGLE_PLACES_MAX_CALLS_PER_DAY", value = tostring(var.google_places_max_calls_per_day) },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)
+      # ECS cannot start a task whose secret has no value, so the key is injected only when Google is enabled.
+      secrets = var.attraction_provider == "google" ? [
+        { name = "GOOGLE_PLACES_API_KEY", valueFrom = data.aws_secretsmanager_secret.google_places_api_key.arn },
+      ] : []
       stopTimeout    = 30
       mountPoints    = []
       volumesFrom    = []
@@ -80,11 +94,17 @@ resource "aws_ecs_task_definition" "recommendation" {
       portMappings = [{ name = "http", containerPort = 8081, hostPort = 8081, protocol = "tcp", appProtocol = "http" }]
       environment = concat([
         { name = "SERVER_PORT", value = "8081" },
-        { name = "TRAVEL_AI_ENABLED", value = "false" },
+        { name = "TRAVEL_AI_ENABLED", value = tostring(var.ai_enabled) },
+        { name = "TRAVEL_AI_MAX_CALLS_PER_DAY", value = tostring(var.ai_max_calls_per_day) },
+        { name = "TRAVEL_AI_MAX_TOKENS", value = tostring(var.ai_max_tokens) },
         { name = "PLACES_DISCOVERY_BASE_URL", value = "http://places-discovery:8082" },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)
+      # Injected only when AI is enabled, for the same reason as the Google key.
+      secrets = var.ai_enabled ? [
+        { name = "OPENAI_API_KEY", valueFrom = data.aws_secretsmanager_secret.openai_api_key.arn },
+      ] : []
       stopTimeout    = 30
       mountPoints    = []
       volumesFrom    = []

@@ -35,7 +35,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - module: infra/terraform/internal-routes
           - module: infra/terraform/ecs-services
           - module: infra/terraform/secrets
           - module: infra/terraform/api-gateway
@@ -128,7 +127,6 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - module: infra/terraform/internal-routes
           - module: infra/terraform/ecs-services
           - module: infra/terraform/secrets
     env:
