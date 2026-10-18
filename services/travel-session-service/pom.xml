@@ -65,7 +65,7 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
         <!-- DynamoDB session store (travel.session.store=dynamodb). The JDK URL connection client replaces the
-             default Apache and Netty clients to keep the image small. -->
+             SDK's default Apache, Apache 5, and Netty clients: a smaller image and fewer libraries to patch. -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>dynamodb</artifactId>
@@ -77,6 +77,10 @@
                 <exclusion>
                     <groupId>software.amazon.awssdk</groupId>
                     <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
