@@ -55,6 +55,11 @@ public class MockAttractionProvider implements AttractionProvider {
                     "Traditional Roman food market.")
     );
 
+    /** The fixed sample set, shared with {@link MockPlaceDetailsProvider}. */
+    static List<Attraction> sampleAttractions() {
+        return ATTRACTIONS;
+    }
+
     @Override
     public List<Attraction> findNearby(BigDecimal latitude, BigDecimal longitude, double searchRadiusKm) {
         log.info("Mock provider returning {} attractions", ATTRACTIONS.size());

@@ -10,7 +10,7 @@ import org.springframework.web.client.RestClient;
 
 /** Wires the Google Places HTTP client. Active only when {@code attraction.provider=google}. */
 @Configuration
-@EnableConfigurationProperties(GooglePlacesProperties.class)
+@EnableConfigurationProperties({GooglePlacesProperties.class, GooglePlaceDetailsProperties.class})
 @ConditionalOnProperty(prefix = "attraction", name = "provider", havingValue = "google")
 public class GooglePlacesConfig {
 

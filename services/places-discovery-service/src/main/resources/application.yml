@@ -40,6 +40,10 @@ google:
     field-mask: places.id,places.displayName,places.location,places.types
     # Hard cap on Google requests per UTC day, per task (cost control). Past it, searches return 503.
     max-calls-per-day: ${GOOGLE_PLACES_MAX_CALLS_PER_DAY:190}
+    details:
+      # Hard cap on Place Details lookups per UTC day, per task. Each lookup also fetches at most one photo.
+      # 30/day stays inside Google's free 1,000/month for both the Enterprise + Atmosphere and Photos SKUs.
+      max-calls-per-day: ${GOOGLE_PLACE_DETAILS_MAX_CALLS_PER_DAY:30}
 
 management:
   endpoints:

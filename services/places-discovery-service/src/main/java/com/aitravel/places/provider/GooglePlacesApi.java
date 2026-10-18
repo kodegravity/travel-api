@@ -47,4 +47,64 @@ public final class GooglePlacesApi {
 
     public record LatLng(double latitude, double longitude) {
     }
+
+    /** Place Details (New) response. Only the fields in the details field mask are modelled. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PlaceDetailsResponse(
+            String id,
+            DisplayName displayName,
+            String formattedAddress,
+            LatLng location,
+            Double rating,
+            Integer userRatingCount,
+            OpeningHours regularOpeningHours,
+            OpeningHours currentOpeningHours,
+            String websiteUri,
+            String googleMapsUri,
+            LocalizedText editorialSummary,
+            String priceLevel,
+            AccessibilityOptions accessibilityOptions,
+            List<Review> reviews,
+            List<Photo> photos
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record OpeningHours(Boolean openNow, List<String> weekdayDescriptions) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record LocalizedText(String text, String languageCode) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AccessibilityOptions(
+            Boolean wheelchairAccessibleEntrance,
+            Boolean wheelchairAccessibleRestroom,
+            Boolean wheelchairAccessibleSeating,
+            Boolean wheelchairAccessibleParking
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Review(
+            Integer rating,
+            LocalizedText text,
+            String relativePublishTimeDescription,
+            AuthorAttribution authorAttribution
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Photo(String name, Integer widthPx, Integer heightPx, List<AuthorAttribution> authorAttributions) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AuthorAttribution(String displayName, String uri, String photoUri) {
+    }
+
+    /** Photo media response with {@code skipHttpRedirect=true}: a short-lived URL without the API key. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PhotoMedia(String name, String photoUri) {
+    }
 }
