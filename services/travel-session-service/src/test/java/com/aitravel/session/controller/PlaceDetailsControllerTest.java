@@ -79,4 +79,17 @@ class PlaceDetailsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Methods", containsStringIgnoringCase("GET")));
     }
+
+    @Test
+    void returnsACardPhotoAndNotFoundWithoutOne() throws Exception {
+        given(client.findPhotoJson("ChIJ-abc_123")).willReturn(Optional.of("{\"url\":\"https://lh3.googleusercontent.com/p/x\"}"));
+        given(client.findPhotoJson("nophoto")).willReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/places/ChIJ-abc_123/photo"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("https://lh3.googleusercontent.com/p/x"));
+        mockMvc.perform(get("/api/v1/places/nophoto/photo"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("No photo"));
+    }
 }

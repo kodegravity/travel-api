@@ -27,6 +27,10 @@ import org.springframework.web.client.RestClientResponseException;
  * <p>The API key goes only in the {@code X-Goog-Api-Key} header and is never logged. The photo is resolved with
  * {@code skipHttpRedirect=true}, so the browser gets a short-lived image URL that carries no key. Nothing is cached:
  * Google's terms allow storing place IDs, not place content.
+ *
+ * <p>Every photo, for the details page or a place card, counts against one shared daily photo cap. A card photo needs
+ * the photo's name first, from a details call asking only for {@code photos}: Google bills that field mask at the free
+ * Place Details Essentials (IDs Only) rate, so the photo itself is the only billed call.
  */
 @Component
 @ConditionalOnProperty(prefix = "attraction", name = "provider", havingValue = "google")
@@ -40,6 +44,7 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
     private final GooglePlacesProperties places;
     private final GooglePlaceDetailsProperties details;
     private final DailyCallLimiter dailyCallLimiter;
+    private final DailyCallLimiter photoLimiter;
 
     // Two constructors: Spring must be told which one to use.
     @Autowired
@@ -54,6 +59,7 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
         this.places = places;
         this.details = details;
         this.dailyCallLimiter = new DailyCallLimiter("google-place-details", details.maxCallsPerDay(), clock);
+        this.photoLimiter = new DailyCallLimiter("google-place-photos", details.photosMaxPerDay(), clock);
     }
 
     @Override
@@ -64,19 +70,49 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
                     "Google Place Details daily call limit of " + dailyCallLimiter.maxCallsPerDay() + " reached", null);
         }
         log.info("Calling Google Place Details");
-        PlaceDetailsResponse response;
+        PlaceDetailsResponse response = fetch(placeId, details.fieldMask());
+        if (response == null || response.id() == null || response.displayName() == null) {
+            return Optional.empty();
+        }
+        return Optional.of(toDetails(response, firstPhoto(response, details.photoMaxWidthPx())));
+    }
+
+    @Override
+    public Optional<PlaceDetails.Photo> findPhoto(String placeId) {
+        if (photoLimiter.usedToday() >= photoLimiter.maxCallsPerDay()) {
+            throw photoLimitReached();
+        }
+        log.info("Calling Google Place Details for a card photo");
+        PlaceDetailsResponse response = fetch(placeId, "photos");
+        if (response == null || response.photos() == null || response.photos().isEmpty()) {
+            return Optional.empty();
+        }
+        if (!photoLimiter.tryAcquire()) {
+            throw photoLimitReached();
+        }
+        return Optional.ofNullable(mediaFor(response.photos().get(0), details.cardPhotoMaxWidthPx()));
+    }
+
+    private AttractionProviderException photoLimitReached() {
+        log.warn("Google Place Photos daily call limit of {} reached, refusing photo", photoLimiter.maxCallsPerDay());
+        return new AttractionProviderException(
+                "Google Place Photos daily call limit of " + photoLimiter.maxCallsPerDay() + " reached", null);
+    }
+
+    /** The place, or null when Google does not know it. */
+    private PlaceDetailsResponse fetch(String placeId, String fieldMask) {
         try {
-            response = restClient.get()
+            return restClient.get()
                     .uri(uri -> uri.path("/v1/places/{id}").queryParam("languageCode", "en").build(placeId))
                     .header(API_KEY_HEADER, places.apiKey())
-                    .header(FIELD_MASK_HEADER, details.fieldMask())
+                    .header(FIELD_MASK_HEADER, fieldMask)
                     .retrieve()
                     .body(PlaceDetailsResponse.class);
         } catch (RestClientResponseException ex) {
             int status = ex.getStatusCode().value();
             if (status == HttpStatus.NOT_FOUND.value()) {
                 log.info("Google Place Details has no such place");
-                return Optional.empty();
+                return null;
             }
             log.warn("Google Place Details failed with HTTP status {}", status);
             throw new AttractionProviderException("Google Place Details failed with HTTP " + status, ex);
@@ -87,25 +123,30 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
             log.warn("Google Place Details response could not be read ({})", ex.getClass().getSimpleName());
             throw new AttractionProviderException("Google Place Details response could not be read", ex);
         }
-        if (response == null || response.id() == null || response.displayName() == null) {
-            return Optional.empty();
-        }
-        return Optional.of(toDetails(response, firstPhoto(response)));
     }
 
-    /** Best effort: a failed photo lookup leaves the page without a photo instead of failing it. */
-    private PlaceDetails.Photo firstPhoto(PlaceDetailsResponse response) {
+    /** Best effort: a failed or capped photo lookup leaves the page without a photo instead of failing it. */
+    private PlaceDetails.Photo firstPhoto(PlaceDetailsResponse response, int maxWidthPx) {
         if (response.photos() == null || response.photos().isEmpty()) {
             return null;
         }
-        GooglePlacesApi.Photo photo = response.photos().get(0);
+        if (!photoLimiter.tryAcquire()) {
+            log.warn("Google Place Photos daily call limit of {} reached, details go without a photo",
+                    photoLimiter.maxCallsPerDay());
+            return null;
+        }
+        return mediaFor(response.photos().get(0), maxWidthPx);
+    }
+
+    /** A short-lived image URL for the photo, or null when the name is not a photo path or the lookup fails. */
+    private PlaceDetails.Photo mediaFor(GooglePlacesApi.Photo photo, int maxWidthPx) {
         if (photo.name() == null || !photo.name().matches("places/[A-Za-z0-9_-]+/photos/[A-Za-z0-9_-]+")) {
             return null;
         }
         try {
             PhotoMedia media = restClient.get()
                     .uri(uri -> uri.path("/v1/" + photo.name() + "/media")
-                            .queryParam("maxWidthPx", details.photoMaxWidthPx())
+                            .queryParam("maxWidthPx", maxWidthPx)
                             .queryParam("skipHttpRedirect", true)
                             .build())
                     .header(API_KEY_HEADER, places.apiKey())

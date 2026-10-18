@@ -55,4 +55,14 @@ class PlaceDetailsClientTest {
                 .isInstanceOf(AttractionProviderException.class)
                 .hasMessage("Places Discovery Service failed with HTTP 500");
     }
+
+    @Test
+    void passesThePhotoJsonThroughAndNoPhotoIsEmpty() {
+        String json = "{\"url\":\"https://lh3.googleusercontent.com/p/small\"}";
+        server.expect(requestTo(DETAILS_URL + "/photo")).andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(DETAILS_URL + "/photo")).andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThat(client.findPhotoJson("ChIJ-abc_123")).contains(json);
+        assertThat(client.findPhotoJson("ChIJ-abc_123")).isEmpty();
+    }
 }

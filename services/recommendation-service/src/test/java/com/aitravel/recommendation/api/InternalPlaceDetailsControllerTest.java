@@ -64,4 +64,15 @@ class InternalPlaceDetailsControllerTest {
 
         mockMvc.perform(get("/internal/v1/places/pantheon")).andExpect(status().isServiceUnavailable());
     }
+
+    @Test
+    void returnsThePhotoJson() throws Exception {
+        given(client.findPhotoJson("pantheon")).willReturn(Optional.of("{\"url\":\"https://lh3.googleusercontent.com/p/x\"}"));
+        given(client.findPhotoJson("nophoto")).willReturn(Optional.empty());
+
+        mockMvc.perform(get("/internal/v1/places/pantheon/photo"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("https://lh3.googleusercontent.com/p/x"));
+        mockMvc.perform(get("/internal/v1/places/nophoto/photo")).andExpect(status().isNotFound());
+    }
 }

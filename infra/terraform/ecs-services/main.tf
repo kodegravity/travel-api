@@ -42,6 +42,8 @@ resource "aws_ecs_task_definition" "places_discovery" {
         { name = "SERVER_PORT", value = "8082" },
         { name = "ATTRACTION_PROVIDER", value = var.attraction_provider },
         { name = "GOOGLE_PLACES_MAX_CALLS_PER_DAY", value = tostring(var.google_places_max_calls_per_day) },
+        { name = "GOOGLE_ROUTES_MAX_CALLS_PER_DAY", value = tostring(var.google_routes_max_calls_per_day) },
+        { name = "GOOGLE_PLACE_PHOTOS_MAX_CALLS_PER_DAY", value = tostring(var.google_place_photos_max_calls_per_day) },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)

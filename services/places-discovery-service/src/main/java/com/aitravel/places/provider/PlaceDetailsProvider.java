@@ -7,4 +7,7 @@ import java.util.Optional;
 public interface PlaceDetailsProvider {
 
     Optional<PlaceDetails> findDetails(String placeId);
+
+    /** One photo for a place card. Empty when the place has no photo or the provider has none. */
+    Optional<PlaceDetails.Photo> findPhoto(String placeId);
 }

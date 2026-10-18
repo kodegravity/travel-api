@@ -19,6 +19,12 @@ public class MockPlaceDetailsProvider implements PlaceDetailsProvider {
                 .map(MockPlaceDetailsProvider::toDetails);
     }
 
+    /** The sample places have no photos. */
+    @Override
+    public Optional<PlaceDetails.Photo> findPhoto(String placeId) {
+        return Optional.empty();
+    }
+
     private static PlaceDetails toDetails(Attraction a) {
         return new PlaceDetails(a.id(), a.name(), null, a.latitude(), a.longitude(), null, null, null, null, null,
                 null, a.description(), null, null, null, null, "sample");

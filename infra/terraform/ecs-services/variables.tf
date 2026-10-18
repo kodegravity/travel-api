@@ -121,6 +121,18 @@ variable "google_places_max_calls_per_day" {
   default     = 190
 }
 
+variable "google_routes_max_calls_per_day" {
+  description = "Hard cap on Google Routes optimizations per UTC day per task. 20 stays inside the free 1,000/month."
+  type        = number
+  default     = 20
+}
+
+variable "google_place_photos_max_calls_per_day" {
+  description = "Hard cap on Google Place Photos per UTC day per task (details page and cards share it). 30 stays inside the free 1,000/month."
+  type        = number
+  default     = 30
+}
+
 variable "ai_max_calls_per_day" {
   description = "Hard cap on OpenAI calls per UTC day per task. Past it, deterministic ranking is used."
   type        = number

@@ -71,9 +71,14 @@ class GooglePlaceDetailsProviderTest {
     }
 
     private GooglePlaceDetailsProvider provider(int maxCallsPerDay) {
+        return provider(maxCallsPerDay, 30);
+    }
+
+    private GooglePlaceDetailsProvider provider(int maxCallsPerDay, int photosPerDay) {
         var places = new GooglePlacesProperties(API_KEY, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(5), 20,
                 "places.id", 190);
-        var details = new GooglePlaceDetailsProperties(maxCallsPerDay, "id,displayName,reviews,photos", 1200, 5);
+        var details = new GooglePlaceDetailsProperties(maxCallsPerDay, "id,displayName,reviews,photos", 1200, 5,
+                photosPerDay, 640);
         return new GooglePlaceDetailsProvider(builder.build(), places, details, Clock.systemUTC());
     }
 
@@ -159,6 +164,53 @@ class GooglePlaceDetailsProviderTest {
         PlaceDetails details = provider(30).findDetails(PLACE_ID).orElseThrow();
 
         assertThat(details.photo()).isNull();
+        server.verify();
+    }
+
+    private static final String PHOTOS_ONLY_JSON = """
+            {"photos": [{"name": "places/ChIJ-abc_123/photos/AelY_photo-1", "widthPx": 4000, "heightPx": 3000,
+                         "authorAttributions": [{"displayName": "Luis", "uri": "https://www.google.com/maps/contrib/2"}]}]}
+            """;
+    private static final String CARD_PHOTO_URL = BASE_URL + "/v1/" + PHOTO_NAME + "/media?maxWidthPx=640&skipHttpRedirect=true";
+
+    @Test
+    void cardPhotoAsksOnlyForPhotosThenResolvesASmallImage() {
+        server.expect(requestTo(DETAILS_URL))
+                .andExpect(header("X-Goog-FieldMask", "photos"))
+                .andRespond(withSuccess(PHOTOS_ONLY_JSON, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(CARD_PHOTO_URL))
+                .andRespond(withSuccess("{\"photoUri\":\"https://lh3.googleusercontent.com/p/small\"}", MediaType.APPLICATION_JSON));
+
+        PlaceDetails.Photo photo = provider(30).findPhoto(PLACE_ID).orElseThrow();
+
+        server.verify();
+        assertThat(photo.url()).isEqualTo("https://lh3.googleusercontent.com/p/small");
+        assertThat(photo.attributions()).extracting(PlaceDetails.Attribution::displayName).containsExactly("Luis");
+    }
+
+    @Test
+    void aPlaceWithoutPhotosUsesNoPhotoCall() {
+        server.expect(requestTo(DETAILS_URL)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        GooglePlaceDetailsProvider provider = provider(30, 1);
+
+        assertThat(provider.findPhoto(PLACE_ID)).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void cardsAndDetailsShareOneDailyPhotoCap() {
+        server.expect(requestTo(DETAILS_URL)).andRespond(withSuccess(PHOTOS_ONLY_JSON, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(CARD_PHOTO_URL))
+                .andRespond(withSuccess("{\"photoUri\":\"https://lh3.googleusercontent.com/p/small\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(DETAILS_URL)).andRespond(withSuccess(DETAILS_JSON, MediaType.APPLICATION_JSON));
+        GooglePlaceDetailsProvider provider = provider(30, 1);
+
+        assertThat(provider.findPhoto(PLACE_ID)).isPresent();
+        // The one photo for today is used: details still load, without a photo call, and cards are refused.
+        assertThat(provider.findDetails(PLACE_ID).orElseThrow().photo()).isNull();
+        assertThatThrownBy(() -> provider.findPhoto(PLACE_ID))
+                .isInstanceOf(AttractionProviderException.class)
+                .hasMessage("Google Place Photos daily call limit of 1 reached");
         server.verify();
     }
 }

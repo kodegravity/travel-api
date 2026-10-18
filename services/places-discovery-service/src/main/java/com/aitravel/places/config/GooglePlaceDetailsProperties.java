@@ -17,6 +17,9 @@ import org.springframework.validation.annotation.Validated;
  * @param fieldMask      value of the {@code X-Goog-FieldMask} header; every field here is billed
  * @param photoMaxWidthPx width requested for the photo
  * @param maxReviews     reviews passed on (Google returns at most 5)
+ * @param photosMaxPerDay hard cap on Place Photos calls per UTC day per task, shared by the details page and the
+ *                        place cards; 30 a day stays inside the free 1,000 a month
+ * @param cardPhotoMaxWidthPx width requested for place-card photos
  */
 @Validated
 @ConfigurationProperties(prefix = "google.places.details")
@@ -26,6 +29,8 @@ public record GooglePlaceDetailsProperties(
                 + "currentOpeningHours.openNow,websiteUri,googleMapsUri,editorialSummary,priceLevel,accessibilityOptions,"
                 + "reviews,photos") String fieldMask,
         @DefaultValue("1200") @Min(100) @Max(4800) int photoMaxWidthPx,
-        @DefaultValue("5") @Min(0) @Max(5) int maxReviews
+        @DefaultValue("5") @Min(0) @Max(5) int maxReviews,
+        @DefaultValue("30") @PositiveOrZero int photosMaxPerDay,
+        @DefaultValue("640") @Min(100) @Max(4800) int cardPhotoMaxWidthPx
 ) {
 }

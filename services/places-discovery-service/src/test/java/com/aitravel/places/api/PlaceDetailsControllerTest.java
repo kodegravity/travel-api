@@ -72,4 +72,25 @@ class PlaceDetailsControllerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.title").value("Attraction provider unavailable"));
     }
+
+    @Test
+    void returnsACardPhoto() throws Exception {
+        given(provider.findPhoto("ChIJ-abc_123")).willReturn(Optional.of(new PlaceDetails.Photo(
+                "https://lh3.googleusercontent.com/p/small", 4000, 3000,
+                java.util.List.of(new PlaceDetails.Attribution("Luis", "https://www.google.com/maps/contrib/2")))));
+
+        mockMvc.perform(get("/internal/v1/places/ChIJ-abc_123/photo"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("https://lh3.googleusercontent.com/p/small"))
+                .andExpect(jsonPath("$.attributions[0].displayName").value("Luis"));
+    }
+
+    @Test
+    void placeWithoutPhotoIsNotFound() throws Exception {
+        given(provider.findPhoto("pantheon")).willReturn(Optional.empty());
+
+        mockMvc.perform(get("/internal/v1/places/pantheon/photo"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("No photo"));
+    }
 }

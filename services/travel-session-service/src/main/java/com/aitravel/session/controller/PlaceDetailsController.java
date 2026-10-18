@@ -44,4 +44,17 @@ public class PlaceDetailsController {
         log.info("GET /api/v1/places/{id} completed");
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
     }
+
+    /** One small photo for a place card. Counts against the shared daily Google photo cap in Places Discovery. */
+    @GetMapping(value = "/{placeId}/photo", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> photo(
+            @PathVariable @Pattern(regexp = PLACE_ID_PATTERN, message = "is not a valid place id") String placeId) {
+        log.info("GET /api/v1/places/{id}/photo received");
+        String body = client.findPhotoJson(placeId).orElseThrow(() -> {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "This place has no photo.");
+            problem.setTitle("No photo");
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, problem, null);
+        });
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
+    }
 }

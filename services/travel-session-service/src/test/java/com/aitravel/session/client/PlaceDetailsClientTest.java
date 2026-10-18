@@ -46,4 +46,12 @@ class PlaceDetailsClientTest {
         server.expect(requestTo(URL)).andRespond(withServerError());
         assertThatThrownBy(() -> client.findDetailsJson("pantheon")).isInstanceOf(AttractionProviderException.class);
     }
+
+    @Test
+    void passesThePhotoJsonThrough() {
+        server.expect(requestTo(URL + "/photo"))
+                .andRespond(withSuccess("{\"url\":\"https://lh3.googleusercontent.com/p/x\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.findPhotoJson("pantheon")).contains("{\"url\":\"https://lh3.googleusercontent.com/p/x\"}");
+    }
 }

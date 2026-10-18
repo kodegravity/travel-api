@@ -21,6 +21,7 @@ public class PlaceDetailsClient {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceDetailsClient.class);
     static final String DETAILS_PATH = "/internal/v1/places/{placeId}";
+    static final String PHOTO_PATH = "/internal/v1/places/{placeId}/photo";
 
     private final RestClient restClient;
 
@@ -30,10 +31,19 @@ public class PlaceDetailsClient {
 
     /** Raw JSON body of the details, or empty when the place is unknown. */
     public Optional<String> findDetailsJson(String placeId) {
+        return getJson(DETAILS_PATH, placeId);
+    }
+
+    /** Raw JSON of one card photo ({@code url}, {@code attributions}), or empty when the place has no photo. */
+    public Optional<String> findPhotoJson(String placeId) {
+        return getJson(PHOTO_PATH, placeId);
+    }
+
+    private Optional<String> getJson(String path, String placeId) {
         log.info("Requesting place details from the recommendation service");
         try {
             String body = restClient.get()
-                    .uri(DETAILS_PATH, placeId)
+                    .uri(path, placeId)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);

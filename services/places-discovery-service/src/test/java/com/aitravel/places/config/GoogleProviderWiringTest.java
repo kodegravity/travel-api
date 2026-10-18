@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.aitravel.places.provider.AttractionProvider;
 import com.aitravel.places.provider.GooglePlaceDetailsProvider;
 import com.aitravel.places.provider.GooglePlacesAttractionProvider;
+import com.aitravel.places.provider.GoogleRoutesProvider;
 import com.aitravel.places.provider.PlaceDetailsProvider;
+import com.aitravel.places.provider.RouteProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,9 +32,13 @@ class GoogleProviderWiringTest {
     @Autowired
     private PlaceDetailsProvider placeDetailsProvider;
 
+    @Autowired
+    private RouteProvider routeProvider;
+
     @Test
     void googleBeansAreCreated() {
         assertThat(attractionProvider).isInstanceOf(GooglePlacesAttractionProvider.class);
         assertThat(placeDetailsProvider).isInstanceOf(GooglePlaceDetailsProvider.class);
+        assertThat(routeProvider).isInstanceOf(GoogleRoutesProvider.class);
     }
 }

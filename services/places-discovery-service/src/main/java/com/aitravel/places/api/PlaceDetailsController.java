@@ -39,4 +39,14 @@ public class PlaceDetailsController {
         log.info("GET /internal/v1/places/{id} completed source={}", details.source());
         return details;
     }
+
+    @GetMapping("/{placeId}/photo")
+    public PlaceDetails.Photo photo(@PathVariable @Pattern(regexp = PLACE_ID_PATTERN, message = "is not a valid place id") String placeId) {
+        log.info("GET /internal/v1/places/{id}/photo received");
+        return detailsProvider.findPhoto(placeId).orElseThrow(() -> {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "This place has no photo.");
+            problem.setTitle("No photo");
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, problem, null);
+        });
+    }
 }
