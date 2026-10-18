@@ -1,23 +1,27 @@
-# ECS Fargate deployment (definitions only)
+# ECS Fargate deployment
 
-Status: deployed to AWS us-east-2 (cluster `ai-travel-app`). Public base URL: `http://ai-travel-app-alb-179383308.us-east-2.elb.amazonaws.com` (HTTP only, see Known limits).
+Status (2026-10-18): deployed to AWS us-east-2 (cluster `ai-travel-app`). Public base URL: `https://t1mmzzwy99.execute-api.us-east-2.amazonaws.com` (API Gateway HTTP API, HTTPS). The ALB was removed on 2026-10-18.
 
-Deployed resources (all prefixed `ai-travel-app`, except the ECR repos and task families, which keep their existing names):
+```
+Internet -- HTTPS --> API Gateway (JWT authorizer, throttling) -- VPC link --> travel-session :8080
+travel-session --Service Connect--> recommendation :8081 --Service Connect--> places-discovery :8082
+```
 
-| Resource | Name |
-|---|---|
-| ECS cluster | `ai-travel-app` |
-| Service Connect namespace | `ai-travel-app` |
-| ALB | `ai-travel-app-alb` (HTTP :80) |
-| Target group | `ai-travel-app-session-tg` (IP, :8080, `/actuator/health`) |
-| Security groups | `ai-travel-app-alb-sg`, `-session-sg`, `-recommendation-sg`, `-places-sg` |
-| Execution role | `ai-travel-app-ecs-execution` |
-| Log groups | `/ecs/ai-travel-companion-<service>` (14-day retention) |
-| Services | `travel-session` (ALB), `recommendation`, `places-discovery` (1 task each) |
+Deployed resources, all managed by Terraform with local state:
 
-Networking differs from the original plan: the services run in the default VPC public subnets with `assignPublicIp=ENABLED`, which avoids a NAT gateway. Inbound access is still limited by security groups. Only the ALB accepts traffic from the internet, and the internal services accept traffic only from the upstream service's security group.
+| Resource | Name | Terraform |
+|---|---|---|
+| API Gateway HTTP API | `roam-ai-api` (stage `$default`, 5 req/s, burst 10) | `infra/terraform/api-gateway` |
+| VPC link and its security group | `roam-ai-api`, `roam-ai-api-vpc-link` | `infra/terraform/api-gateway` |
+| Access logs | `/aws/apigateway/roam-ai-api` (14-day retention) | `infra/terraform/api-gateway` |
+| ECS task definitions and services | `travel-session`, `recommendation`, `places-discovery` (1 task each) | `infra/terraform/ecs-services` |
+| Session table | `roam-travel-sessions` (on-demand, TTL `purgeAt`) | `infra/terraform/session-store` |
 
-Task definitions were registered with `ATTRACTION_PROVIDER=mock`, `TRAVEL_AI_ENABLED=false`, and no Secrets Manager entries. The `OKTA_ISSUER` and `OKTA_AUDIENCE` values were injected at registration time and are not stored in this repo. The `CORS_ALLOWED_ORIGINS` value is `http://localhost:5173`, so a deployed frontend needs this updated.
+Created outside Terraform: the ECS cluster and Service Connect namespace (`ai-travel-app`), the execution role `ai-travel-app-ecs-execution`, the task role `ai-travel-app-ecs-task`, the security groups `ai-travel-app-session-sg`, `-recommendation-sg`, `-places-sg`, and the log groups `/ecs/ai-travel-companion-<service>` (14-day retention).
+
+The services run in the default VPC public subnets with `assignPublicIp=ENABLED`, which avoids a NAT gateway. No security group accepts traffic from the internet: travel-session accepts 8080 only from the VPC link security group, and the internal services accept traffic only from the upstream service's security group.
+
+travel-session is a Service Connect server (`discovery_name = "travel-session"`), so API Gateway finds its task in Cloud Map. Places Discovery runs with `ATTRACTION_PROVIDER=mock` and Recommendation with `TRAVEL_AI_ENABLED=false` until the Google and OpenAI keys are added. `CORS_ALLOWED_ORIGINS` is `http://localhost:5173`, so a deployed frontend needs its origin added.
 
 The sections below were the original plan. Use them as a reference.
 

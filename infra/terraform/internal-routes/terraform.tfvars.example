@@ -1,6 +1,0 @@
-region                           = "us-east-2"
-vpc_id                           = "vpc-xxxxxxxx"
-listener_arn                     = "arn:aws:elasticloadbalancing:us-east-2:512383926725:listener/app/ai-travel-app-alb/xxxx/yyyy"
-alb_security_group_id            = "sg-xxxxxxxx"
-recommendation_security_group_id = "sg-xxxxxxxx"
-places_security_group_id         = "sg-xxxxxxxx"
