@@ -70,20 +70,8 @@ variable "travel_session_security_group_id" {
   type        = string
 }
 
-variable "places_target_group_arn" {
-  description = "Target group of places-discovery (internal ALB route)."
-  type        = string
-}
 
-variable "recommendation_target_group_arn" {
-  description = "Target group of recommendation (internal ALB route)."
-  type        = string
-}
 
-variable "travel_session_target_group_arn" {
-  description = "Target group of travel-session (public ALB default route)."
-  type        = string
-}
 
 variable "cors_allowed_origins" {
   description = "Allowed browser origins for travel-session."

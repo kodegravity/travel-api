@@ -175,11 +175,6 @@ resource "aws_ecs_service" "places_discovery" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = var.places_target_group_arn
-    container_name   = "ai-travel-companion-places-discovery"
-    container_port   = 8082
-  }
 
   service_connect_configuration {
     enabled   = true
@@ -211,11 +206,6 @@ resource "aws_ecs_service" "recommendation" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = var.recommendation_target_group_arn
-    container_name   = "ai-travel-companion-recommendation"
-    container_port   = 8081
-  }
 
   service_connect_configuration {
     enabled   = true
@@ -234,14 +224,13 @@ resource "aws_ecs_service" "recommendation" {
 }
 
 resource "aws_ecs_service" "travel_session" {
-  name                              = "travel-session"
-  cluster                           = data.aws_ecs_cluster.this.arn
-  task_definition                   = "${aws_ecs_task_definition.travel_session.family}:${aws_ecs_task_definition.travel_session.revision}"
-  desired_count                     = var.desired_count
-  launch_type                       = "FARGATE"
-  enable_execute_command            = true
-  health_check_grace_period_seconds = 60
-  availability_zone_rebalancing     = "ENABLED"
+  name                          = "travel-session"
+  cluster                       = data.aws_ecs_cluster.this.arn
+  task_definition               = "${aws_ecs_task_definition.travel_session.family}:${aws_ecs_task_definition.travel_session.revision}"
+  desired_count                 = var.desired_count
+  launch_type                   = "FARGATE"
+  enable_execute_command        = true
+  availability_zone_rebalancing = "ENABLED"
 
   network_configuration {
     subnets          = var.subnet_ids
@@ -249,11 +238,6 @@ resource "aws_ecs_service" "travel_session" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = var.travel_session_target_group_arn
-    container_name   = "ai-travel-companion-travel-session"
-    container_port   = 8080
-  }
 
   # Registered as a server so API Gateway can find the task in Cloud Map (IP and port) through its VPC link.
   service_connect_configuration {
