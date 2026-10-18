@@ -9,6 +9,7 @@ import com.aitravel.session.dto.RecommendationRequest;
 import com.aitravel.session.dto.RecommendationResponse;
 import com.aitravel.session.dto.RefreshStatus;
 import com.aitravel.session.dto.TravelSessionRecommendationResponse;
+import com.aitravel.session.exception.AttractionProviderException;
 import com.aitravel.session.exception.TravelSessionException;
 import com.aitravel.session.exception.TravelSessionException.Reason;
 import com.aitravel.session.model.Location;
@@ -102,8 +103,14 @@ public class TravelSessionService {
                     snapshot.availableMinutes());
             log.info("Calling recommendation service sessionId={} excludedPlaces={}",
                     sessionId, snapshot.recommendedPlaceIds().size());
-            RecommendationResponse result =
-                    recommendationService.recommend(recommendationRequest, snapshot.recommendedPlaceIds());
+            RecommendationResponse result;
+            try {
+                result = recommendationService.recommend(recommendationRequest, snapshot.recommendedPlaceIds());
+            } catch (AttractionProviderException ex) {
+                log.warn("Refresh failed sessionId={} reason=recommendation-service-unavailable, session state unchanged",
+                        sessionId);
+                throw ex;
+            }
             List<RecommendationDto> recommendations = result.recommendations();
             log.debug("Recommendation service returned sessionId={} count={}", sessionId, recommendations.size());
             List<String> placeIds = recommendations.stream()
@@ -113,6 +120,7 @@ public class TravelSessionService {
 
             // A stop or expiry that happened during the provider call discards this result.
             if (!session.recordEvaluation(current, now, placeIds)) {
+                log.info("Refresh result discarded, session ended during provider call sessionId={}", sessionId);
                 throw stateException(session, now);
             }
             RefreshStatus status = recommendations.isEmpty() ? RefreshStatus.NO_NEW_RESULTS : RefreshStatus.UPDATED;
@@ -129,6 +137,7 @@ public class TravelSessionService {
         TravelSession session = find(sessionId, ownerSubject);
         session.expireIfDue(now);
         if (session.status() == TravelSessionStatus.EXPIRED) {
+            log.info("Stop rejected, session already expired sessionId={}", sessionId);
             throw new TravelSessionException(Reason.EXPIRED);
         }
         session.stop();
@@ -137,7 +146,10 @@ public class TravelSessionService {
 
     @Scheduled(fixedDelayString = "${travel.session.cleanup-interval-ms:60000}")
     public void purgeExpiredSessions() {
-        repository.purge(clock.instant(), retention());
+        int removed = repository.purge(clock.instant(), retention());
+        if (removed > 0) {
+            log.info("Purged expired travel sessions removed={}", removed);
+        }
     }
 
     /**
@@ -164,6 +176,7 @@ public class TravelSessionService {
         TravelSession session = find(sessionId, ownerSubject);
         session.expireIfDue(now);
         if (session.status() != TravelSessionStatus.ACTIVE) {
+            log.info("Request rejected, session is not active sessionId={} status={}", sessionId, session.status());
             throw stateException(session, now);
         }
         return session;
@@ -174,9 +187,15 @@ public class TravelSessionService {
      * so session IDs cannot be probed.
      */
     private TravelSession find(UUID sessionId, String ownerSubject) {
-        return repository.findById(sessionId)
-                .filter(session -> session.ownerSubject().equals(ownerSubject))
-                .orElseThrow(() -> new TravelSessionException(Reason.NOT_FOUND));
+        TravelSession session = repository.findById(sessionId).orElseThrow(() -> {
+            log.info("Session lookup found no session sessionId={}", sessionId);
+            return new TravelSessionException(Reason.NOT_FOUND);
+        });
+        if (!session.ownerSubject().equals(ownerSubject)) {
+            log.warn("Session access denied, caller does not own sessionId={}", sessionId);
+            throw new TravelSessionException(Reason.NOT_FOUND);
+        }
+        return session;
     }
 
     private TravelSessionException stateException(TravelSession session, Instant now) {

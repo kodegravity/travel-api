@@ -64,6 +64,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(TravelSessionException.class)
     public ResponseEntity<ProblemDetail> handleTravelSession(TravelSessionException ex) {
         TravelSessionException.Reason reason = ex.reason();
+        log.info("Travel session request rejected reason={} status={}", reason, reason.status().value());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(reason.status(), reason.detail());
         problem.setTitle(reason.title());
         return ResponseEntity.status(reason.status()).body(problem);

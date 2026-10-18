@@ -42,11 +42,14 @@ public class RemoteRecommendationService implements RecommendationService {
         log.info("Sending recommendation search to {} excludedPlaces={}", RECOMMENDATIONS_PATH, excludedPlaceIds.size());
         log.debug("Recommendation search request interests={} availableMinutes={} maxBudget={} currency={}",
                 request.interests(), request.availableMinutes(), request.maxBudget(), request.currencyCode());
+        long startedAt = System.nanoTime();
         RecommendationResponse response = post(new RecommendationSearchRequest(request, excludedPlaceIds));
-        log.info("Recommendation service responded count={}", response.recommendations().size());
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
         if (response == null) {
+            log.warn("Recommendation service returned an empty body after {} ms", elapsedMs);
             throw new AttractionProviderException("Recommendation Service returned no body", null);
         }
+        log.info("Recommendation service responded count={} elapsedMs={}", response.recommendations().size(), elapsedMs);
         return response;
     }
 

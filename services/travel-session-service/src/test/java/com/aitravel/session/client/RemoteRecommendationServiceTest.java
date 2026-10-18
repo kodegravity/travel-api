@@ -64,6 +64,17 @@ class RemoteRecommendationServiceTest {
     }
 
     @Test
+    void emptyBodyBecomesAttractionProviderException() {
+        server.expect(requestTo(BASE_URL + "/internal/v1/recommendations"))
+                .andRespond(withSuccess("", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> service.recommend(request()))
+                .isInstanceOf(AttractionProviderException.class)
+                .hasMessageContaining("no body");
+        server.verify();
+    }
+
+    @Test
     void serverErrorBecomesAttractionProviderException() {
         server.expect(requestTo(BASE_URL + "/internal/v1/recommendations")).andRespond(withServerError());
 
