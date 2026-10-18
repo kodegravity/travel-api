@@ -1,5 +1,7 @@
 package com.aitravel.recommendation.config;
 
+import com.aitravel.recommendation.service.DailyCallLimiter;
+import java.time.Clock;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,5 +23,10 @@ public class AiConfig {
                             + "Set it, or run with TRAVEL_AI_ENABLED=false.");
         }
         return builder.build();
+    }
+
+    @Bean
+    DailyCallLimiter aiDailyCallLimiter(TravelAiProperties properties) {
+        return new DailyCallLimiter("openai", properties.maxCallsPerDay(), Clock.systemUTC());
     }
 }

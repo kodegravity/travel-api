@@ -9,6 +9,7 @@ import com.aitravel.places.provider.GooglePlacesApi.LocationRestriction;
 import com.aitravel.places.provider.GooglePlacesApi.SearchNearbyRequest;
 import com.aitravel.places.provider.GooglePlacesApi.SearchNearbyResponse;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -40,6 +41,7 @@ public class GooglePlacesAttractionProvider implements AttractionProvider {
 
     private final RestClient restClient;
     private final GooglePlacesProperties properties;
+    private final DailyCallLimiter dailyCallLimiter;
 
     public GooglePlacesAttractionProvider(RestClient googlePlacesRestClient, GooglePlacesProperties properties) {
         if (properties.apiKey() == null || properties.apiKey().isBlank()) {
@@ -49,6 +51,7 @@ public class GooglePlacesAttractionProvider implements AttractionProvider {
         }
         this.restClient = googlePlacesRestClient;
         this.properties = properties;
+        this.dailyCallLimiter = new DailyCallLimiter("google-places", properties.maxCallsPerDay(), Clock.systemUTC());
     }
 
     @Override
@@ -62,7 +65,11 @@ public class GooglePlacesAttractionProvider implements AttractionProvider {
                         searchRadiusKm * METRES_PER_KM)));
 
         log.info("Calling Google Places searchNearby radiusKm={} maxResults={}", searchRadiusKm, properties.maxResultCount());
-        log.debug("Google Places search coordinates latitude={} longitude={}", latitude, longitude);
+        if (!dailyCallLimiter.tryAcquire()) {
+            log.warn("Google Places daily call limit of {} reached, refusing search", dailyCallLimiter.maxCallsPerDay());
+            throw new AttractionProviderException(
+                    "Google Places daily call limit of " + dailyCallLimiter.maxCallsPerDay() + " reached", null);
+        }
         SearchNearbyResponse response = search(request);
         if (response == null || response.places() == null) {
             log.info("Google Places searchNearby returned no places");

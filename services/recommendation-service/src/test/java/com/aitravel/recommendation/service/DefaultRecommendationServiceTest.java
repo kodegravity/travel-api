@@ -72,6 +72,34 @@ class DefaultRecommendationServiceTest {
     }
 
     @Test
+    void aiFailureFallsBackToDeterministicRanking() {
+        givenProvider(
+                attraction("history", Set.of(Interest.HISTORY), "16", "EUR", 60, ORIGIN_LAT, ORIGIN_LON));
+        AIRecommendationService ai = (preferences, candidates) -> {
+            throw new com.aitravel.recommendation.exception.AiRecommendationException("OpenAI down", null);
+        };
+
+        RecommendationResponse response = serviceWithAi(ai).recommend(
+                request(Set.of(Interest.HISTORY), "50", "EUR", 180));
+
+        assertThat(response.recommendations()).extracting(RecommendationDto::placeId).containsExactly("history");
+        assertThat(response.recommendations().get(0).description()).startsWith("Matches your interests: HISTORY.");
+    }
+
+    @Test
+    void emptyAiSelectionFallsBackToDeterministicRanking() {
+        givenProvider(
+                attraction("history", Set.of(Interest.HISTORY), "16", "EUR", 60, ORIGIN_LAT, ORIGIN_LON));
+        AIRecommendationService ai = (preferences, candidates) ->
+                List.of(new AiRecommendation("not-a-candidate", "Invented place."));
+
+        RecommendationResponse response = serviceWithAi(ai).recommend(
+                request(Set.of(Interest.HISTORY), "50", "EUR", 180));
+
+        assertThat(response.recommendations()).extracting(RecommendationDto::placeId).containsExactly("history");
+    }
+
+    @Test
     void aiEngineIsNotCalledWhenNoCandidateIsEligible() {
         givenProvider(
                 attraction("pricey", Set.of(Interest.HISTORY), "99", "EUR", 60, ORIGIN_LAT, ORIGIN_LON));

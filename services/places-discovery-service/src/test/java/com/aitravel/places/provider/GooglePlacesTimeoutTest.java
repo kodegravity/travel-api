@@ -53,7 +53,7 @@ class GooglePlacesTimeoutTest {
                 .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
                 .build();
         var properties = new GooglePlacesProperties("test-key", baseUrl, Duration.ofSeconds(1),
-                Duration.ofMillis(200), 20, "places.id");
+                Duration.ofMillis(200), 20, "places.id", 200);
         var provider = new GooglePlacesAttractionProvider(restClient, properties);
 
         assertThatThrownBy(() -> provider.findNearby(new BigDecimal("41.9"), new BigDecimal("12.5"), 5.0))

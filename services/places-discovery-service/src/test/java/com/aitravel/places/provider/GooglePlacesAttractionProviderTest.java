@@ -31,7 +31,7 @@ class GooglePlacesAttractionProviderTest {
 
     private static final String API_KEY = "test-api-key-do-not-log";
     private static final String BASE_URL = "https://places.googleapis.com";
-    private static final String FIELD_MASK = "places.id,places.displayName,places.location,places.types,places.googleMapsUri";
+    private static final String FIELD_MASK = "places.id,places.displayName,places.location,places.types";
     private static final String SEARCH_URL = BASE_URL + "/v1/places:searchNearby";
 
     private RestClient.Builder restClientBuilder;
@@ -135,7 +135,23 @@ class GooglePlacesAttractionProviderTest {
                 .hasMessageNotContaining(API_KEY);
     }
 
+    @Test
+    void dailyCallLimitBlocksFurtherRequestsWithoutCallingGoogle() {
+        GooglePlacesAttractionProvider limited = new GooglePlacesAttractionProvider(
+                restClientBuilder.build(), properties(API_KEY, 0));
+
+        assertThatThrownBy(() -> limited.findNearby(new BigDecimal("41.9028"), new BigDecimal("12.4964"), 5.0))
+                .isInstanceOf(AttractionProviderException.class)
+                .hasMessageContaining("daily call limit");
+        server.verify();
+    }
+
     private static GooglePlacesProperties properties(String apiKey) {
-        return new GooglePlacesProperties(apiKey, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(5), 20, FIELD_MASK);
+        return properties(apiKey, 200);
+    }
+
+    private static GooglePlacesProperties properties(String apiKey, int maxCallsPerDay) {
+        return new GooglePlacesProperties(apiKey, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(5), 20, FIELD_MASK,
+                maxCallsPerDay);
     }
 }

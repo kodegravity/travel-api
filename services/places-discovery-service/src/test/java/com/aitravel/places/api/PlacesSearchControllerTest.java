@@ -60,6 +60,17 @@ class PlacesSearchControllerTest {
     }
 
     @Test
+    void unexpectedProviderErrorReturnsGenericProblemDetail() throws Exception {
+        given(attractionProvider.findNearby(any(), any(), anyDouble()))
+                .willThrow(new IllegalStateException("internal detail lat=41.9028"));
+
+        mockMvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.title").value("Internal server error"))
+                .andExpect(jsonPath("$.detail").value("An unexpected error occurred. Please try again later."));
+    }
+
+    @Test
     void returnsOkWithEmptyListWhenNoAttractionsExist() throws Exception {
         given(attractionProvider.findNearby(any(), any(), anyDouble())).willReturn(List.of());
 

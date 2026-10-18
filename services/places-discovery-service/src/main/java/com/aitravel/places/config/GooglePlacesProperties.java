@@ -2,6 +2,7 @@ package com.aitravel.places.config;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -19,6 +20,7 @@ import org.springframework.validation.annotation.Validated;
  * @param readTimeout    response timeout for Google requests
  * @param maxResultCount places requested per search (Google allows at most 20)
  * @param fieldMask      value of the {@code X-Goog-FieldMask} header; lists only the fields that are needed
+ * @param maxCallsPerDay hard cap on Google requests per UTC day (cost control); past it, searches fail with 503
  */
 @Validated
 @ConfigurationProperties(prefix = "google.places")
@@ -28,7 +30,8 @@ public record GooglePlacesProperties(
         @DefaultValue("2s") Duration connectTimeout,
         @DefaultValue("5s") Duration readTimeout,
         @DefaultValue("20") @Min(1) @Max(20) int maxResultCount,
-        @DefaultValue("places.id,places.displayName,places.location,places.types,places.googleMapsUri") String fieldMask
+        @DefaultValue("places.id,places.displayName,places.location,places.types") String fieldMask,
+        @DefaultValue("200") @PositiveOrZero int maxCallsPerDay
 ) {
 
     @Override
@@ -38,6 +41,7 @@ public record GooglePlacesProperties(
                 + ", readTimeout=" + readTimeout
                 + ", maxResultCount=" + maxResultCount
                 + ", fieldMask=" + fieldMask
+                + ", maxCallsPerDay=" + maxCallsPerDay
                 + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "<unset>" : "<redacted>") + "]";
     }
 }

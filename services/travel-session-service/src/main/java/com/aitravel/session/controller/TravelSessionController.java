@@ -55,8 +55,6 @@ public class TravelSessionController {
             @PathVariable UUID sessionId,
             @Valid @RequestBody TravelSessionRefreshRequest request) {
         log.info("POST /api/v1/travel-sessions/{}/recommendations received", sessionId);
-        log.debug("Refresh location sessionId={} latitude={} longitude={}",
-                sessionId, request.location().latitude(), request.location().longitude());
         TravelSessionRecommendationResponse response =
                 travelSessionService.refresh(sessionId, jwt.getSubject(), request.location());
         log.info("POST /api/v1/travel-sessions/{}/recommendations completed status={} count={}",

@@ -27,7 +27,6 @@ public class PlacesSearchController {
     public PlacesSearchResponse search(@Valid @RequestBody PlacesSearchRequest request) {
         PlacesSearchRequest.Coordinates location = request.location();
         log.info("POST /internal/v1/places/search received radiusKm={}", request.searchRadiusKm());
-        log.debug("Places search coordinates latitude={} longitude={}", location.latitude(), location.longitude());
         List<Attraction> attractions = attractionProvider.findNearby(
                 location.latitude(), location.longitude(), request.searchRadiusKm());
         log.info("POST /internal/v1/places/search completed count={}", attractions.size());

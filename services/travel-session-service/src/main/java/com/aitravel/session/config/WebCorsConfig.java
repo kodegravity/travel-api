@@ -27,7 +27,8 @@ public class WebCorsConfig implements WebMvcConfigurer {
         registry.addMapping("/api/v1/**")
                 .allowedOrigins(properties.allowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "POST", "DELETE", "OPTIONS")
-                .allowedHeaders("Content-Type", "Accept")
+                // Authorization carries the Okta bearer token; browsers preflight it on every authenticated call.
+                .allowedHeaders("Authorization", "Content-Type", "Accept")
                 .allowCredentials(false)
                 .maxAge(1800);
     }

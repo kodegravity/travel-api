@@ -12,6 +12,7 @@ import com.aitravel.session.dto.TravelSessionRecommendationResponse;
 import com.aitravel.session.exception.AttractionProviderException;
 import com.aitravel.session.exception.TravelSessionException;
 import com.aitravel.session.exception.TravelSessionException.Reason;
+import com.aitravel.session.logging.LogIds;
 import com.aitravel.session.model.Location;
 import com.aitravel.session.model.TravelSession;
 import com.aitravel.session.model.TravelSessionStatus;
@@ -65,12 +66,12 @@ public class TravelSessionService {
                 maxLifetime());
 
         log.debug("Creating session sessionId={} owner={} maxBudget={} currency={} expiresAt={}",
-                session.sessionId(), ownerSubject, request.maxBudget(), request.currencyCode(), session.expiresAt());
+                session.sessionId(), LogIds.subject(ownerSubject), request.maxBudget(), request.currencyCode(), session.expiresAt());
         if (!repository.addIfCapacity(session, properties.maxActiveSessions(), now, retention())) {
-            log.warn("Session capacity reached, rejecting new session owner={}", ownerSubject);
+            log.warn("Session capacity reached, rejecting new session owner={}", LogIds.subject(ownerSubject));
             throw new TravelSessionException(Reason.CAPACITY_REACHED);
         }
-        log.info("Travel session created sessionId={} owner={}", session.sessionId(), ownerSubject);
+        log.info("Travel session created sessionId={} owner={}", session.sessionId(), LogIds.subject(ownerSubject));
         return new CreateTravelSessionResponse(session.sessionId(), TravelSessionStatus.ACTIVE, session.expiresAt());
     }
 
@@ -141,7 +142,7 @@ public class TravelSessionService {
             throw new TravelSessionException(Reason.EXPIRED);
         }
         session.stop();
-        log.info("Travel session stopped sessionId={} owner={}", sessionId, ownerSubject);
+        log.info("Travel session stopped sessionId={} owner={}", sessionId, LogIds.subject(ownerSubject));
     }
 
     @Scheduled(fixedDelayString = "${travel.session.cleanup-interval-ms:60000}")

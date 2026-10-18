@@ -1,102 +1,86 @@
-# AI Travel Companion – Backend API
+# ROAM / AI – AI Travel Companion (Backend)
 
-A location-aware travel assistant API that will help international travelers discover nearby attractions and activities based on location, interests, available time, and budget.
+A location-aware travel assistant. A traveler shares their location, interests, budget, and available time, and gets up to three nearby attractions they can realistically fit in, refreshed automatically as they move (Active Travel Mode).
 
-This repository currently contains only the initial application skeleton (Task 1 of the backlog): Spring Boot setup, configuration, and a health check. Business features will be added in later stories.
+The backend is three independent Spring Boot services. Each has its own `pom.xml`, Maven wrapper, Dockerfile, and image.
+
+| Service | Port | Endpoints | Role |
+|---|---|---|---|
+| `services/travel-session-service` | 8080 | `/api/v1/recommendations`, `/api/v1/travel-sessions/**` (public) | Okta-protected public API, Active Travel Mode sessions, CORS |
+| `services/recommendation-service` | 8081 | `/internal/v1/recommendations` | Eligibility filters, deterministic ranking, optional OpenAI selection |
+| `services/places-discovery-service` | 8082 | `/internal/v1/places/search` | Attraction discovery: mock (Rome) or Google Places (New) |
+
+```
+Browser (Okta PKCE) -> travel-session -> recommendation -> places-discovery -> Google Places
+                                              \-> OpenAI (optional)
+```
+
+Calls between services use `RestClient` and forward the caller's validated Okta token and `X-Request-Id`.
 
 ## Tech Stack
 
-- Java 21
-- Spring Boot 4.0.8 (Spring Framework 7, Spring AI 2.0.1)
-- Maven (with Maven Wrapper)
-- Spring Web MVC, Spring Boot Validation, Spring Boot Actuator
-- JUnit 5 and Spring Boot Test
-- Embedded Tomcat
+Java 21, Spring Boot 4.0.8, Spring Security OAuth2 resource server (Okta), Spring AI 2.0.1 (OpenAI), Maven wrapper, JUnit 5. Containers run as non-root on Eclipse Temurin 21 Alpine.
 
-## Prerequisites
+## Build, Test, Run
 
-- JDK 21 (any vendor). Verify with `java -version`.
-- No Maven installation is required; the included wrapper (`mvnw`) downloads Maven 3.9.9 on first use.
+From any service directory:
 
-## Project Structure
-
-```
-travel-companion-api/
-├── .mvn/wrapper/maven-wrapper.properties
-├── mvnw / mvnw.cmd
-├── pom.xml
-└── src
-    ├── main
-    │   ├── java/com/aitravel/companion
-    │   │   ├── TravelCompanionApplication.java   # Spring Boot entry point
-    │   │   ├── config/        # Spring configuration classes (future)
-    │   │   ├── controller/    # REST controllers (future)
-    │   │   ├── dto/           # Request/response objects (future)
-    │   │   ├── exception/     # Error handling (future)
-    │   │   ├── model/         # Domain model (future)
-    │   │   ├── provider/      # External providers, e.g. Places/AI (future)
-    │   │   ├── repository/    # Persistence (future)
-    │   │   └── service/       # Business logic (future)
-    │   └── resources
-    │       └── application.yml
-    └── test
-        └── java/com/aitravel/companion
-            └── TravelCompanionApplicationTests.java
+```bash
+./mvnw clean verify      # build and run the tests (no paid API calls)
+OKTA_ISSUER=https://<domain>.okta.com/oauth2/default OKTA_AUDIENCE=api://default ./mvnw spring-boot:run
 ```
 
-The empty packages contain `.gitkeep` placeholders so Git tracks them.
+`OKTA_ISSUER` and `OKTA_AUDIENCE` are required by every service. Start places-discovery, then recommendation, then travel-session. Default base URLs point at `localhost:8082` and `localhost:8081`. See [docs/OKTA_LOCAL_SETUP.md](docs/OKTA_LOCAL_SETUP.md) and [docs/POSTMAN_TESTING.md](docs/POSTMAN_TESTING.md).
 
 ## Configuration
 
-Configuration lives in `src/main/resources/application.yml`.
+| Setting | Service | Env var | Default |
+|---|---|---|---|
+| Okta issuer / audience | all | `OKTA_ISSUER`, `OKTA_AUDIENCE` | required |
+| Required scope | all | `TRAVEL_REQUIRED_SCOPE` | unset (any valid token) |
+| Allowed browser origins | travel-session | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` |
+| Recommendation service URL | travel-session | `RECOMMENDATION_SERVICE_BASE_URL` | `http://localhost:8081` |
+| Places service URL | recommendation | `PLACES_DISCOVERY_BASE_URL` | `http://localhost:8082` |
+| Search radius / walking speed / max results | recommendation | `RECOMMENDATION_SEARCH_RADIUS_KM`, `RECOMMENDATION_WALKING_SPEED_KMH`, `RECOMMENDATION_MAX_RESULTS` | `5`, `4.5`, `3` |
+| AI selection on/off | recommendation | `TRAVEL_AI_ENABLED` (needs `OPENAI_API_KEY`) | `false` |
+| AI model | recommendation | `TRAVEL_AI_MODEL` | `gpt-4o-mini` |
+| Attraction provider | places-discovery | `ATTRACTION_PROVIDER` (`mock` or `google`, needs `GOOGLE_PLACES_API_KEY`) | `mock` |
 
-| Setting | Default | Environment variable |
-|---|---|---|
-| Server port | `8080` | `SERVER_PORT` |
-| Search radius (km) | `5` | `RECOMMENDATION_SEARCH_RADIUS_KM` |
-| Walking speed (km/h) | `4.5` | `RECOMMENDATION_WALKING_SPEED_KMH` |
-| Max recommendations | `3` | `RECOMMENDATION_MAX_RESULTS` |
+Secrets are supplied through environment variables (Secrets Manager on ECS) and are never logged or committed.
 
-Actuator exposes only `health`, with details hidden. Secrets and API keys must never be committed. Future secrets will be supplied through environment variables.
+## Cost Controls
 
-## Docker and CI
+Paid APIs are off by default. When enabled, each one has a hard daily cap per running task, counted per UTC day:
 
-The container image, environment variables, health check, and GitHub Actions pipeline are documented in [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md).
+| Control | Env var | Default | When exceeded |
+|---|---|---|---|
+| OpenAI calls per day | `TRAVEL_AI_MAX_CALLS_PER_DAY` | `300` | Falls back to deterministic ranking (users still get results) |
+| OpenAI output tokens per call | `TRAVEL_AI_MAX_TOKENS` | `500` | Response is cut off at the cap |
+| Google Places calls per day | `GOOGLE_PLACES_MAX_CALLS_PER_DAY` | `200` | Search returns 503 |
 
-## Build and Test
+The caps are per process, so with N tasks the effective limit is N times the value. Also set provider-side limits: a daily quota on the Places API in Google Cloud, plus a budget alert, and a prepaid balance with auto-recharge off in OpenAI.
 
-```bash
-./mvnw clean verify          # macOS/Linux
-mvnw.cmd clean verify        # Windows
-```
+The AI engine also falls back to ranking when OpenAI errors or selects nothing usable, so an AI outage never hides eligible attractions.
 
-## Run Locally
-
-```bash
-./mvnw spring-boot:run
-
-# or build and run the JAR
-./mvnw clean package
-java -jar target/travel-companion-api-0.0.1-SNAPSHOT.jar
-
-# optional: run on another port
-SERVER_PORT=9090 ./mvnw spring-boot:run
-```
-
-## Verify the Health Endpoint
+## Health
 
 ```bash
 curl http://localhost:8080/actuator/health
 # {"status":"UP"}
 ```
 
-Other actuator endpoints (for example `/actuator/env`) return 404 by design.
+Only `health` is exposed. Other actuator endpoints return 404 by design.
 
-## API: Recommendations (ATC-007, Chunk 3)
+## Docker, CI, and AWS
 
-`POST /api/v1/recommendations` (`Content-Type: application/json`)
+- Docker images and the GitHub Actions pipeline (build, test, Trivy scan, ECR push via OIDC): [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md)
+- ECS Fargate deployment (cluster `ai-travel-app`, us-east-2): [docs/ECS_DEPLOYMENT.md](docs/ECS_DEPLOYMENT.md), task definitions in `infra/ecs/`
+- Logs: CloudWatch `/ecs/ai-travel-companion-<service>`, forwarded to Datadog by the Datadog Forwarder Lambda
+- Frontend integration: [docs/FRONTEND_API_INTEGRATION.md](docs/FRONTEND_API_INTEGRATION.md)
 
-Valid requests return **HTTP 200** with recommendations from the `MockAttractionProvider` (10 mock attractions in Rome, EUR). Costs and durations in the mock data are development values, not verified prices or opening hours.
+## API: Recommendations
+
+`POST /api/v1/recommendations` (travel-session-service, `Content-Type: application/json`, `Authorization: Bearer <Okta access token>`)
 
 Eligibility: within the search radius (5 km, Haversine); at least one selected interest; known duration; walking time plus visit duration within `availableMinutes`; cost within `maxBudget` only when the currency matches the request. Attractions with an unknown cost are kept with a neutral budget score, and currency mismatches are not converted. Ranking uses interest 40%, distance 25%, budget 20%, time 15% (see `RecommendationRankingService`), with ties broken by attraction ID. At most 3 results are returned. Recommendation reasons are generated deterministically from known data.
 
@@ -167,24 +151,24 @@ Results are ordered by score. Ties are broken by attraction ID.
 ```bash
 # Valid request from Rome -> 200
 curl -i -X POST http://localhost:8080/api/v1/recommendations \
-  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"location":{"latitude":41.8902,"longitude":12.4922},"interests":["HISTORY"],"maxBudget":50.00,"currencyCode":"EUR","availableMinutes":180}'
 
 # Invalid latitude -> 400
 curl -i -X POST http://localhost:8080/api/v1/recommendations \
-  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"location":{"latitude":91,"longitude":2.2945},"interests":["ART"],"maxBudget":10,"currencyCode":"USD","availableMinutes":60}'
 
 # Malformed JSON -> 400
 curl -i -X POST http://localhost:8080/api/v1/recommendations \
-  -H 'Content-Type: application/json' -d '{"location":'
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"location":'
 ```
 
 ## Git Notes
 
 `target/`, IDE files (`.idea/`, `*.iml`), and local secret files (`.env`, `application-local.yml`) are ignored via `.gitignore`.
 
-## Google Places provider (Chunk 4)
+## Google Places provider
 
 The attraction source is selected with `ATTRACTION_PROVIDER`:
 
@@ -193,7 +177,7 @@ The attraction source is selected with `ATTRACTION_PROVIDER`:
 | `mock` (default) | In-memory Rome development data. No network calls. |
 | `google` | Calls Google Places API (New) `places:searchNearby`. Requires `GOOGLE_PLACES_API_KEY`. |
 
-Run against Google:
+Run places-discovery against Google:
 
 ```bash
 export GOOGLE_PLACES_API_KEY=your-key-here   # never commit this value
@@ -204,13 +188,13 @@ export ATTRACTION_PROVIDER=google
 If `ATTRACTION_PROVIDER=google` and the key is missing, startup fails with a message naming `GOOGLE_PLACES_API_KEY`. The key is never logged or returned in responses.
 
 Notes:
-- Requests use the `X-Goog-FieldMask` header `places.id,places.displayName,places.location,places.types,places.googleMapsUri`. Google bills by field, so add fields only when needed.
+- Requests use the `X-Goog-FieldMask` header `places.id,places.displayName,places.location,places.types`. Google bills by field, so add fields only when needed.
 - Google does not return visit duration, cost, or currency. Durations are documented per-category estimates (HISTORY/ART 90 min; NATURE/FOOD/SHOPPING/LOCAL_EXPERIENCES 60 min). Costs and currency stay `null`.
 - If Google is unavailable or returns an error, the API responds with HTTP 503 (RFC 9457 ProblemDetail) and a generic message.
 
 Tests: `./mvnw clean verify` uses the mock provider and mocks Google HTTP with `MockRestServiceServer`. No real key is needed.
 
-## Active Travel Mode (Chunk 6)
+## Active Travel Mode
 
 A traveler starts a short-lived session with preferences, then sends their location whenever the web page has permission to share it. The backend does not track the device. Session state lives only in memory, and restarting the application removes all active sessions.
 
@@ -221,7 +205,7 @@ A traveler starts a short-lived session with preferences, then sends their locat
 3. Later calls refresh only when the traveler has moved and enough time has passed (see rules below).
 4. `DELETE /api/v1/travel-sessions/{sessionId}` stops the session and clears preferences, location, and recommended IDs.
 
-The session ID is a bearer credential. Anyone holding it can use the session, so treat it as a secret and send it only over HTTPS.
+Sessions belong to the authenticated user. Another user's session ID returns 404.
 
 ### Endpoints
 
@@ -229,7 +213,7 @@ The session ID is a bearer credential. Anyone holding it can use the session, so
 
 ```bash
 curl -s -X POST localhost:8080/api/v1/travel-sessions \
-  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"interests":["HISTORY","ART"],"maxBudget":50,"currencyCode":"EUR","availableMinutes":180}'
 ```
 
@@ -245,7 +229,7 @@ Validation rules match `POST /api/v1/recommendations` (interests, budget, ISO-42
 
 ```bash
 curl -s -X POST localhost:8080/api/v1/travel-sessions/$SESSION_ID/recommendations \
-  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"location":{"latitude":41.9028,"longitude":12.4964}}'
 ```
 
@@ -269,7 +253,7 @@ curl -s -X POST localhost:8080/api/v1/travel-sessions/$SESSION_ID/recommendation
 #### Stop session
 
 ```bash
-curl -i -X DELETE localhost:8080/api/v1/travel-sessions/$SESSION_ID
+curl -i -X DELETE localhost:8080/api/v1/travel-sessions/$SESSION_ID -H "Authorization: Bearer $TOKEN"
 ```
 
 `204 No Content`. Repeating the request on a stopped session also returns `204`, so the call is idempotent.
@@ -298,6 +282,8 @@ All errors use RFC 9457 `application/problem+json`.
 
 | Case | Status |
 |---|---|
+| Missing, expired, or invalid Okta token | 401 |
+| Token lacks the required scope | 403 |
 | Invalid JSON body, validation failure, invalid location | 400 |
 | Malformed session UUID | 400 |
 | Unknown session (or expired and purged) | 404 |
@@ -327,9 +313,9 @@ Tests use a controllable `Clock` (`support/MutableClock`) and mock the recommend
 ### Limitations
 
 - Sessions are in memory only. Restarting the application ends all sessions. Use a shared store (for example Redis) before running multiple instances.
-- Session IDs are bearer tokens with no authentication layer yet.
+- Every endpoint requires an Okta access token, and a session is visible only to the user (`sub`) who created it.
 - Expired tombstones are retained until the retention period ends. Total memory is bounded by creation rate, not by active session count alone.
-- AI personalization (Chunk 5) is not wired into the refresh path. Refresh uses the deterministic recommendation pipeline only.
+- When `TRAVEL_AI_ENABLED=true`, refreshes also go through the AI engine, so each `UPDATED` refresh can cost one Google call and one OpenAI call. `UNCHANGED` refreshes cost nothing.
 
 ### Integration with a React frontend
 

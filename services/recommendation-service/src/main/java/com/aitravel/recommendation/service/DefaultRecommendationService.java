@@ -5,6 +5,7 @@ import com.aitravel.recommendation.dto.LocationRequest;
 import com.aitravel.recommendation.dto.RecommendationDto;
 import com.aitravel.recommendation.dto.RecommendationRequest;
 import com.aitravel.recommendation.dto.RecommendationResponse;
+import com.aitravel.recommendation.exception.AiRecommendationException;
 import com.aitravel.recommendation.model.Attraction;
 import com.aitravel.recommendation.model.Interest;
 import com.aitravel.recommendation.provider.AttractionProvider;
@@ -83,25 +84,33 @@ public class DefaultRecommendationService implements RecommendationService {
         }
         if (aiRecommendationService.isPresent()) {
             log.info("Delegating {} eligible attractions to AI recommendation engine", ranked.size());
-            return recommendWithAi(request, ranked, aiRecommendationService.get());
+            Optional<RecommendationResponse> aiResponse = recommendWithAi(request, ranked, aiRecommendationService.get());
+            if (aiResponse.isPresent()) {
+                return aiResponse.get();
+            }
         }
+        return recommendByRanking(request, ranked);
+    }
 
+    private RecommendationResponse recommendByRanking(RecommendationRequest request, List<RankedRecommendation> ranked) {
         List<RecommendationDto> recommendations = ranked.stream()
                 .limit(properties.maxRecommendations())
                 .map(r -> toDto(r.candidate(), explanation(r, request), request))
                 .toList();
         log.debug("Ranking selected {} recommendations", recommendations.size());
-
         return new RecommendationResponse(recommendations);
     }
 
     /**
      * The AI engine selects only from the eligible, ranked candidates (it never discovers places), so every
      * returned attraction has already passed the same budget, time, distance, and interest checks.
+     *
+     * <p>Returns empty when the AI fails, hits its daily limit, or selects nothing usable. The caller then falls
+     * back to deterministic ranking, so eligible candidates are never hidden behind an AI outage.
      */
-    private RecommendationResponse recommendWithAi(RecommendationRequest request,
-                                                   List<RankedRecommendation> ranked,
-                                                   AIRecommendationService ai) {
+    private Optional<RecommendationResponse> recommendWithAi(RecommendationRequest request,
+                                                             List<RankedRecommendation> ranked,
+                                                             AIRecommendationService ai) {
         Map<String, RankedRecommendation> byId = new HashMap<>();
         ranked.forEach(r -> byId.putIfAbsent(r.candidate().attraction().id(), r));
 
@@ -110,12 +119,23 @@ public class DefaultRecommendationService implements RecommendationService {
                 Set.copyOf(request.interests()), request.maxBudget(), request.currencyCode(),
                 request.availableMinutes());
 
-        List<RecommendationDto> recommendations = ai.recommend(preferences, attractions).stream()
+        List<AiRecommendation> selections;
+        try {
+            selections = ai.recommend(preferences, attractions);
+        } catch (AiRecommendationException ex) {
+            log.warn("AI recommendation unavailable, falling back to ranking: {}", ex.getMessage());
+            return Optional.empty();
+        }
+        List<RecommendationDto> recommendations = selections.stream()
                 .filter(selection -> byId.containsKey(selection.attractionId()))
                 .map(selection -> toDto(byId.get(selection.attractionId()).candidate(),
                         selection.reason(), request))
                 .toList();
-        return new RecommendationResponse(recommendations);
+        if (recommendations.isEmpty()) {
+            log.warn("AI selected no usable candidates out of {}, falling back to ranking", ranked.size());
+            return Optional.empty();
+        }
+        return Optional.of(new RecommendationResponse(recommendations));
     }
 
     /** Applies all eligibility rules. Returns the candidate with travel metrics, or empty if excluded. */

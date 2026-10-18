@@ -35,6 +35,10 @@
           "value": "mock"
         },
         {
+          "name": "GOOGLE_PLACES_MAX_CALLS_PER_DAY",
+          "value": "200"
+        },
+        {
           "name": "OKTA_ISSUER",
           "value": "<OKTA_ISSUER>"
         },

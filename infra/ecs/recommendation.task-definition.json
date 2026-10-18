@@ -35,6 +35,14 @@
           "value": "false"
         },
         {
+          "name": "TRAVEL_AI_MAX_CALLS_PER_DAY",
+          "value": "300"
+        },
+        {
+          "name": "TRAVEL_AI_MAX_TOKENS",
+          "value": "500"
+        },
+        {
           "name": "PLACES_DISCOVERY_BASE_URL",
           "value": "http://places-discovery:8082"
         },

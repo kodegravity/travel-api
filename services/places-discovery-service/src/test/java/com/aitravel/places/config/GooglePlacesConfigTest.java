@@ -34,7 +34,7 @@ class GooglePlacesConfigTest {
     @Test
     void propertiesToStringNeverRevealsTheApiKey() {
         var properties = new GooglePlacesProperties("secret-key-value", "https://places.googleapis.com",
-                Duration.ofSeconds(2), Duration.ofSeconds(5), 20, "places.id");
+                Duration.ofSeconds(2), Duration.ofSeconds(5), 20, "places.id", 200);
 
         assertThat(properties.toString()).doesNotContain("secret-key-value").contains("<redacted>");
     }

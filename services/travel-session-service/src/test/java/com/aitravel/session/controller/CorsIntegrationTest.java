@@ -62,6 +62,18 @@ class CorsIntegrationTest {
     }
 
     @Test
+    void preflightAllowsBearerTokenHeader() throws Exception {
+        mockMvc.perform(options("/api/v1/travel-sessions")
+                        .header("Origin", ALLOWED)
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("authorization")))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("content-type")));
+    }
+
+    @Test
     void preflightFromDisallowedOriginIsRejected() throws Exception {
         mockMvc.perform(options("/api/v1/travel-sessions")
                         .header("Origin", DISALLOWED)

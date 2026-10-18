@@ -34,10 +34,13 @@ public class SpringAIRecommendationService implements AIRecommendationService {
 
     private final ChatClient chatClient;
     private final TravelAiProperties properties;
+    private final DailyCallLimiter dailyCallLimiter;
 
-    public SpringAIRecommendationService(ChatClient chatClient, TravelAiProperties properties) {
+    public SpringAIRecommendationService(ChatClient chatClient, TravelAiProperties properties,
+                                         DailyCallLimiter aiDailyCallLimiter) {
         this.chatClient = chatClient;
         this.properties = properties;
+        this.dailyCallLimiter = aiDailyCallLimiter;
     }
 
     @Override
@@ -47,6 +50,11 @@ public class SpringAIRecommendationService implements AIRecommendationService {
             return List.of();
         }
 
+        // Checked last, so calls that would be skipped anyway do not use up the daily allowance.
+        if (!dailyCallLimiter.tryAcquire()) {
+            throw new AiRecommendationException(
+                    "Daily OpenAI call limit of " + dailyCallLimiter.maxCallsPerDay() + " reached", null);
+        }
         SelectionResponse response;
         try {
             response = chatClient.prompt()

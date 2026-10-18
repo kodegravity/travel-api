@@ -13,6 +13,7 @@ import com.aitravel.recommendation.exception.AiRecommendationException;
 import com.aitravel.recommendation.model.Attraction;
 import com.aitravel.recommendation.model.Interest;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,22 @@ class SpringAIRecommendationServiceTest {
         when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
         ChatClient chatClient = ChatClient.builder(chatModel).build();
         return new SpringAIRecommendationService(chatClient,
-                new TravelAiProperties(true, "gpt-4o-mini", maxCandidates, maxRecommendations));
+                new TravelAiProperties(true, "gpt-4o-mini", maxCandidates, maxRecommendations, 1000),
+                new DailyCallLimiter("openai", 1000, Clock.systemUTC()));
+    }
+
+    @Test
+    void dailyLimitReachedThrowsWithoutCallingTheModel() {
+        when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
+        SpringAIRecommendationService limited = new SpringAIRecommendationService(
+                ChatClient.builder(chatModel).build(),
+                new TravelAiProperties(true, "gpt-4o-mini", 10, 3, 0),
+                new DailyCallLimiter("openai", 0, Clock.systemUTC()));
+
+        assertThatThrownBy(() -> limited.recommend(PREFERENCES, candidates()))
+                .isInstanceOf(AiRecommendationException.class)
+                .hasMessageContaining("Daily OpenAI call limit");
+        verify(chatModel, never()).call(any(Prompt.class));
     }
 
     private void modelReplies(String json) {

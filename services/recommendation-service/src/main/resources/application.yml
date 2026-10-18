@@ -15,6 +15,8 @@ spring:
       chat:
         options:
           model: ${TRAVEL_AI_MODEL:gpt-4o-mini}
+          # Caps output tokens per call (cost control). Three short reasons fit comfortably.
+          max-tokens: ${TRAVEL_AI_MAX_TOKENS:500}
     model:
       chat: ${SPRING_AI_MODEL_CHAT:openai}
       embedding: none
@@ -50,6 +52,8 @@ travel:
     model: ${TRAVEL_AI_MODEL:gpt-4o-mini}
     max-candidates: ${TRAVEL_AI_MAX_CANDIDATES:10}
     max-recommendations: ${TRAVEL_AI_MAX_RECOMMENDATIONS:3}
+    # Hard cap on OpenAI calls per UTC day, per task. Past it, deterministic ranking is used.
+    max-calls-per-day: ${TRAVEL_AI_MAX_CALLS_PER_DAY:300}
 
 management:
   endpoints:
