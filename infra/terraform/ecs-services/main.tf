@@ -112,6 +112,7 @@ resource "aws_ecs_task_definition" "recommendation" {
         { name = "TRAVEL_AI_MAX_CALLS_PER_DAY", value = tostring(var.ai_max_calls_per_day) },
         { name = "TRAVEL_AI_MAX_TOKENS", value = tostring(var.ai_max_tokens) },
         { name = "TRAVEL_LIVE_AI_MAX_CALLS_PER_DAY", value = tostring(var.live_ai_max_calls_per_day) },
+        { name = "TRAVEL_AI_TIMEOUT", value = var.ai_timeout },
         { name = "PLACES_DISCOVERY_BASE_URL", value = "http://places-discovery:8082" },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },

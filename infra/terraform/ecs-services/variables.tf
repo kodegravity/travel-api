@@ -162,6 +162,12 @@ variable "events_max_calls_per_day" {
   default     = 1000
 }
 
+variable "ai_timeout" {
+  description = "Longest wait for one OpenAI reply before falling back to ranking. On 0.25 vCPU the first calls after a restart need more than 4s."
+  type        = string
+  default     = "10s"
+}
+
 variable "live_ai_max_calls_per_day" {
   description = "Hard cap on OpenAI calls for live event alerts per UTC day per task. 100 is about $1/month at most on gpt-4o-mini."
   type        = number
