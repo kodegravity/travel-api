@@ -162,6 +162,12 @@ variable "events_max_calls_per_day" {
   default     = 1000
 }
 
+variable "chat_ai_max_calls_per_day" {
+  description = "Hard cap on OpenAI replies for the Ask ROAM chat per UTC day per task. 200 is about $6/month at most on gpt-4o-mini."
+  type        = number
+  default     = 200
+}
+
 variable "ai_timeout" {
   description = "Longest wait for one OpenAI reply before falling back to ranking. On 0.25 vCPU the first calls after a restart need more than 4s."
   type        = string

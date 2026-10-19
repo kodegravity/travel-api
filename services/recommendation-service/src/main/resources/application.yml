@@ -66,6 +66,9 @@ travel:
     hours: ${TRAVEL_LIVE_HOURS:6}
     # Hard cap on OpenAI calls for live alerts per UTC day, per task. Past it, rule-based picks are used.
     ai-max-calls-per-day: ${TRAVEL_LIVE_AI_MAX_CALLS_PER_DAY:100}
+  chat:
+    # "Ask ROAM" chat: hard cap on OpenAI replies per UTC day, per task. Past it, rule-based replies are used.
+    ai-max-calls-per-day: ${TRAVEL_CHAT_AI_MAX_CALLS_PER_DAY:200}
 
 management:
   endpoints:
