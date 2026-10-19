@@ -58,6 +58,8 @@ travel:
     max-recommendations: ${TRAVEL_AI_MAX_RECOMMENDATIONS:3}
     # Hard cap on OpenAI calls per UTC day, per task. Past it, deterministic ranking is used.
     max-calls-per-day: ${TRAVEL_AI_MAX_CALLS_PER_DAY:300}
+    # Longest wait for one OpenAI reply. Past it, deterministic ranking is returned.
+    timeout: ${TRAVEL_AI_TIMEOUT:4s}
 
 management:
   endpoints:

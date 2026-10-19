@@ -12,7 +12,9 @@ import com.aitravel.recommendation.config.TravelAiProperties;
 import com.aitravel.recommendation.exception.AiRecommendationException;
 import com.aitravel.recommendation.model.Attraction;
 import com.aitravel.recommendation.model.Interest;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Clock;
 import java.util.List;
 import java.util.Set;
@@ -33,12 +35,18 @@ class SpringAIRecommendationServiceTest {
 
     private final ChatModel chatModel = mock(ChatModel.class);
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private SpringAIRecommendationService service(int maxCandidates, int maxRecommendations) {
+        return service(maxCandidates, maxRecommendations, Duration.ofSeconds(5));
+    }
+
+    private SpringAIRecommendationService service(int maxCandidates, int maxRecommendations, Duration timeout) {
         when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
         ChatClient chatClient = ChatClient.builder(chatModel).build();
         return new SpringAIRecommendationService(chatClient,
-                new TravelAiProperties(true, "gpt-4o-mini", maxCandidates, maxRecommendations, 1000),
-                new DailyCallLimiter("openai", 1000, Clock.systemUTC()));
+                new TravelAiProperties(true, "gpt-4o-mini", maxCandidates, maxRecommendations, 1000, timeout),
+                new DailyCallLimiter("openai", 1000, Clock.systemUTC()), meterRegistry);
     }
 
     @Test
@@ -46,8 +54,8 @@ class SpringAIRecommendationServiceTest {
         when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
         SpringAIRecommendationService limited = new SpringAIRecommendationService(
                 ChatClient.builder(chatModel).build(),
-                new TravelAiProperties(true, "gpt-4o-mini", 10, 3, 0),
-                new DailyCallLimiter("openai", 0, Clock.systemUTC()));
+                new TravelAiProperties(true, "gpt-4o-mini", 10, 3, 0, Duration.ofSeconds(5)),
+                new DailyCallLimiter("openai", 0, Clock.systemUTC()), meterRegistry);
 
         assertThatThrownBy(() -> limited.recommend(PREFERENCES, candidates()))
                 .isInstanceOf(AiRecommendationException.class)
@@ -145,6 +153,60 @@ class SpringAIRecommendationServiceTest {
         assertThatThrownBy(() -> service(10, 3).recommend(PREFERENCES, candidates()))
                 .isInstanceOf(AiRecommendationException.class)
                 .hasMessage("AI recommendation request failed");
+    }
+
+    @Test
+    void timeoutThrowsAndRecordsTimeoutOutcome() {
+        when(chatModel.call(any(Prompt.class))).thenAnswer(invocation -> {
+            Thread.sleep(2_000);
+            return new ChatResponse(List.of(new Generation(new AssistantMessage("{\"selections\":[]}"))));
+        });
+
+        assertThatThrownBy(() -> service(10, 3, Duration.ofMillis(50)).recommend(PREFERENCES, candidates()))
+                .isInstanceOf(AiRecommendationException.class)
+                .hasMessageContaining("timed out");
+        assertThat(meterRegistry.get("travel.ai.selection").tag("outcome", "timeout").timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void recordsSuccessOutcomeAndLatency() {
+        modelReplies("""
+                {"selections":[{"attractionId":"pantheon","reason":"Good fit."}]}
+                """);
+
+        service(10, 3).recommend(PREFERENCES, candidates());
+
+        assertThat(meterRegistry.get("travel.ai.selection").tag("outcome", "success").timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void recordsProviderErrorOutcome() {
+        when(chatModel.call(any(Prompt.class))).thenThrow(new RuntimeException("upstream 401"));
+
+        assertThatThrownBy(() -> service(10, 3).recommend(PREFERENCES, candidates()))
+                .isInstanceOf(AiRecommendationException.class);
+        assertThat(meterRegistry.get("travel.ai.selection").tag("outcome", "provider_error").timer().count())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void dropsReasonsWithInventedClockTimesOpeningStatusOrPrices() {
+        modelReplies("""
+                {"selections":[
+                  {"attractionId":"colosseum","reason":"Open until 18:30 today."},
+                  {"attractionId":"pantheon","reason":"Entry is EUR 12 so it fits."},
+                  {"attractionId":"trevi","reason":"Best seen at 6 pm, when it is quiet."}]}
+                """);
+
+        assertThat(service(10, 3).recommend(PREFERENCES, candidates())).isEmpty();
+    }
+
+    @Test
+    void keepsReasonsThatOnlyUseSuppliedFacts() {
+        assertThat(SpringAIRecommendationService.inventsFacts("Matches your HISTORY interest and budget.")).isFalse();
+        assertThat(SpringAIRecommendationService.inventsFacts("Open-air square close to you.")).isFalse();
+        assertThat(SpringAIRecommendationService.inventsFacts("Opens at 9 am.")).isTrue();
+        assertThat(SpringAIRecommendationService.inventsFacts("Costs $20.")).isTrue();
     }
 
     private static List<Attraction> candidates() {
