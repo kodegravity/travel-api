@@ -37,13 +37,15 @@ data "aws_iam_role" "travel_session_task" {
   name = var.task_role_name
 }
 
-# Least privilege: only the item operations the repository uses, only on this table.
+# Least privilege: only the item operations the repository uses, only on this table. Transactions (the messaging
+# outbox) need no extra action beyond Put/Update; DeleteItem removes published outbox items and released claims.
 data "aws_iam_policy_document" "sessions_access" {
   statement {
     actions = [
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
       "dynamodb:Scan",
     ]
     resources = [aws_dynamodb_table.sessions.arn]
