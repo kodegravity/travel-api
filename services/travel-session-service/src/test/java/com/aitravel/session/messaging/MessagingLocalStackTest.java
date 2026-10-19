@@ -56,6 +56,8 @@ class MessagingLocalStackTest {
 
     @BeforeAll
     static void createTopicQueuesAndSubscription() {
+        // The service's SNS client takes its region from the AWS default chain, as on ECS.
+        System.setProperty("aws.region", "us-east-2");
         var endpoint = URI.create(System.getenv("LOCALSTACK_ENDPOINT"));
         var credentials = StaticCredentialsProvider.create(AwsBasicCredentials.create("test", "test"));
         sns = SnsClient.builder().endpointOverride(endpoint).region(Region.US_EAST_2).credentialsProvider(credentials).build();
@@ -88,6 +90,7 @@ class MessagingLocalStackTest {
         registry.add("travel.messaging.topic-arn", () -> topicArn);
         registry.add("travel.messaging.notification-queue", () -> QUEUE);
         registry.add("spring.cloud.aws.endpoint", () -> System.getenv("LOCALSTACK_ENDPOINT"));
+        registry.add("travel.messaging.sns-endpoint", () -> System.getenv("LOCALSTACK_ENDPOINT"));
         registry.add("spring.cloud.aws.region.static", () -> "us-east-2");
         registry.add("spring.cloud.aws.credentials.access-key", () -> "test");
         registry.add("spring.cloud.aws.credentials.secret-key", () -> "test");

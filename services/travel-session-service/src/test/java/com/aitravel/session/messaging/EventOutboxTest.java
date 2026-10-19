@@ -27,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
 class EventOutboxTest {
 
     private static final Instant NOW = Instant.parse("2026-10-19T12:00:00Z");
-    private static final MessagingProperties ENABLED = new MessagingProperties(true, "arn:test", "q", Duration.ofSeconds(20), Duration.ofDays(7));
+    private static final MessagingProperties ENABLED = new MessagingProperties(true, "arn:test", "q", Duration.ofSeconds(20), Duration.ofDays(7), "");
 
     private final JsonMapper mapper = JsonMapper.builder().build();
     private final InMemoryTravelSessionRepository store = new InMemoryTravelSessionRepository();

@@ -45,7 +45,7 @@ public class EventOutbox {
 
     /** An outbox that writes and publishes nothing, for when messaging is off. */
     public static EventOutbox disabled() {
-        return new EventOutbox(new MessagingProperties(false, "", "", null, null), null, Clock.systemUTC(), null, null, null);
+        return new EventOutbox(new MessagingProperties(false, "", "", null, null, ""), null, Clock.systemUTC(), null, null, null);
     }
 
     public boolean enabled() {

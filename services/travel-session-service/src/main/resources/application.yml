@@ -1,9 +1,7 @@
 spring:
   cloud:
     aws:
-      # Spring Cloud AWS clients exist only with messaging on; credentials and region come from the default chain.
-      sns:
-        enabled: ${TRAVEL_MESSAGING_ENABLED:false}
+      # The SQS listener client exists only with messaging on; credentials and region come from the default chain.
       sqs:
         enabled: ${TRAVEL_MESSAGING_ENABLED:false}
   application:
@@ -35,6 +33,8 @@ travel:
     notification-queue: ${TRAVEL_MESSAGING_NOTIFICATION_QUEUE:roam-notification-events}
     # How often the outbox relay sweeps for events the fast path could not publish.
     relay-interval-ms: ${TRAVEL_MESSAGING_RELAY_INTERVAL_MS:30000}
+    # Endpoint override for LocalStack only; blank uses the regional SNS endpoint.
+    sns-endpoint: ${TRAVEL_MESSAGING_SNS_ENDPOINT:}
   warmup:
     # Background warm-up after startup (Okta keys, first downstream connection).
     enabled: ${TRAVEL_WARMUP_ENABLED:true}

@@ -50,11 +50,11 @@
 
     <dependencies>
         <!-- SNS publishing and SQS listeners for event-driven messaging (off unless TRAVEL_MESSAGING_ENABLED=true). -->
+        <!-- Plain SDK client for publishing; built in MessagingConfig like the DynamoDB client. (The Spring Cloud AWS
+             SNS starter requires sns-message-manager, which brings httpclient5/httpcore5 that Trivy flags.) -->
         <dependency>
-            <groupId>io.awspring.cloud</groupId>
-            <artifactId>spring-cloud-aws-starter-sns</artifactId>
-            <!-- Same as dynamodb: no Apache clients (Trivy flagged httpcore5). SNS uses url-connection-client; the
-                 SQS listener's async client uses netty-nio-client. -->
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sns</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>software.amazon.awssdk</groupId>
@@ -63,6 +63,10 @@
                 <exclusion>
                     <groupId>software.amazon.awssdk</groupId>
                     <artifactId>apache5-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

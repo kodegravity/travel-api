@@ -73,6 +73,10 @@ The SNS message attribute `eventType` carries the same type, for subscription fi
   - Unpublished items expire after 7 days (TTL).
   - `NearbyEventDiscovered` has no session write, so its outbox item is written on its own.
 - **Never breaks the API.** SNS errors are logged and counted; the event waits for the sweep.
+- **SQS problems never stop a service from starting.** Listener containers are created with `autoStartup` off.
+  `SqsListenerStarter` starts them once the app is serving, and retries every minute while SQS is unreachable or a
+  queue is missing. Queues are never created by the app (`QueueNotFoundStrategy.FAIL`); Terraform owns them.
+  `MessagingStartupTest` guards this in both services.
 - **Idempotent consumers.** Delivery is at least once.
   - The notification consumer validates the message, then claims `processed#notification#<eventId>` with a
     conditional put (shared by every task; TTL 7 days). It releases the claim if handling fails, so the retry runs
@@ -114,6 +118,13 @@ Queue depth, message age, and DLQ size come from the standard `AWS/SQS` CloudWat
 
 Credentials and region come from the AWS default chain (the ECS task role and `AWS_REGION`). No account IDs or ARNs
 are hard-coded.
+
+**Libraries:**
+- Publishing uses the plain AWS SDK v2 `SnsClient` (the URL-connection HTTP client, built like the DynamoDB client).
+  The Spring Cloud AWS SNS starter needs `sns-message-manager`, which brings `httpclient5`/`httpcore5`, flagged by
+  Trivy.
+- Consuming uses Spring Cloud AWS 4.0.2 `@SqsListener` with its Netty-based async client.
+- Apache HTTP clients are excluded in both services.
 
 ## Rolling it out
 

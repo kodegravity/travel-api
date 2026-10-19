@@ -53,7 +53,7 @@ class SessionEventsTest {
     }
 
     private TravelSessionService service(EventPublisher eventPublisher) {
-        EventOutbox outbox = new EventOutbox(new MessagingProperties(true, "arn:test", "q", Duration.ofSeconds(20), Duration.ofDays(7)),
+        EventOutbox outbox = new EventOutbox(new MessagingProperties(true, "arn:test", "q", Duration.ofSeconds(20), Duration.ofDays(7), ""),
                 mapper, clock, repository, eventPublisher, new SimpleMeterRegistry());
         return new TravelSessionService(repository, recommendations, new TravelSessionProperties(250, 5, 30, 120, 30, 100, 30),
                 clock, outbox);

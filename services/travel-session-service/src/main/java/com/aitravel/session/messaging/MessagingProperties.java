@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param notificationQueue  SQS queue name for the notification consumer
  * @param relayMinAge        entries younger than this are left to the fast path
  * @param processedRetention how long handled event ids are remembered for duplicate detection
+ * @param snsEndpoint        SNS endpoint override, for LocalStack; blank uses the regional endpoint
  *
  * <p>The relay's sweep interval is {@code travel.messaging.relay-interval-ms}, read by its {@code @Scheduled}.
  */
@@ -22,6 +23,7 @@ public record MessagingProperties(
         @DefaultValue("") String topicArn,
         @DefaultValue("roam-notification-events") String notificationQueue,
         @DefaultValue("20s") Duration relayMinAge,
-        @DefaultValue("7d") Duration processedRetention
+        @DefaultValue("7d") Duration processedRetention,
+        @DefaultValue("") String snsEndpoint
 ) {
 }
