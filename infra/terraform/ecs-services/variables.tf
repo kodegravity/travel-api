@@ -174,6 +174,12 @@ variable "live_ai_max_calls_per_day" {
   default     = 100
 }
 
+variable "ticketmaster_api_key_json_key" {
+  description = "Field inside the Ticketmaster secret's JSON that holds the key."
+  type        = string
+  default     = "ticketmaster-api-key"
+}
+
 variable "ticketmaster_api_key_secret_name" {
   description = "Secrets Manager secret holding the Ticketmaster API key (see ../secrets)."
   type        = string

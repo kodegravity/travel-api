@@ -59,7 +59,8 @@ resource "aws_ecs_task_definition" "places_discovery" {
           { name = "GOOGLE_PLACES_API_KEY", valueFrom = data.aws_secretsmanager_secret.google_places_api_key.arn },
         ] : [],
         var.events_provider == "ticketmaster" ? [
-          { name = "TICKETMASTER_API_KEY", valueFrom = data.aws_secretsmanager_secret.ticketmaster_api_key.arn },
+          # The secret is key/value JSON; ECS injects just this field.
+          { name = "TICKETMASTER_API_KEY", valueFrom = "${data.aws_secretsmanager_secret.ticketmaster_api_key.arn}:${var.ticketmaster_api_key_json_key}::" },
         ] : [],
       )
       stopTimeout    = 30
