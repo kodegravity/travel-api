@@ -11,13 +11,13 @@ class GooglePlaceMapperTest {
 
     @Test
     void usesLongestEstimatedVisitWhenPlaceHasSeveralInterests() {
-        // museum -> ART (90), tourist_attraction -> LOCAL_EXPERIENCES (60): the longer estimate wins.
+        // museum -> ART (45), tourist_attraction -> LOCAL_EXPERIENCES (30): the longer estimate wins.
         var place = place("p1", "Museum Hub", List.of("museum", "tourist_attraction"));
 
         var attraction = GooglePlaceMapper.toAttraction(place).orElseThrow();
 
         assertThat(attraction.categories()).containsExactlyInAnyOrder(Interest.ART, Interest.LOCAL_EXPERIENCES);
-        assertThat(attraction.estimatedDurationMinutes()).isEqualTo(90);
+        assertThat(attraction.estimatedDurationMinutes()).isEqualTo(45);
     }
 
     @Test

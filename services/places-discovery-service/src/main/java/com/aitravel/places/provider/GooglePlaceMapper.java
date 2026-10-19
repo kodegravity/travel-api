@@ -18,12 +18,12 @@ import java.util.Set;
 final class GooglePlaceMapper {
 
     private static final Map<Interest, Integer> ESTIMATED_VISIT_MINUTES = Map.of(
-            Interest.HISTORY, 90,
-            Interest.ART, 90,
-            Interest.NATURE, 60,
-            Interest.FOOD, 60,
-            Interest.SHOPPING, 60,
-            Interest.LOCAL_EXPERIENCES, 60
+            Interest.HISTORY, 45,
+            Interest.ART, 45,
+            Interest.NATURE, 30,
+            Interest.FOOD, 30,
+            Interest.SHOPPING, 30,
+            Interest.LOCAL_EXPERIENCES, 30
     );
 
     private GooglePlaceMapper() {

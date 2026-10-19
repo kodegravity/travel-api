@@ -90,7 +90,7 @@ class GooglePlacesAttractionProviderTest {
         assertThat(colosseum.categories()).containsExactlyInAnyOrder(Interest.HISTORY, Interest.LOCAL_EXPERIENCES);
         assertThat(colosseum.latitude()).isEqualByComparingTo("41.8902");
         assertThat(colosseum.longitude()).isEqualByComparingTo("12.4922");
-        assertThat(colosseum.estimatedDurationMinutes()).isEqualTo(90);
+        assertThat(colosseum.estimatedDurationMinutes()).isEqualTo(45);
         assertThat(colosseum.estimatedCost()).isNull();
         assertThat(colosseum.currencyCode()).isNull();
         server.verify();
