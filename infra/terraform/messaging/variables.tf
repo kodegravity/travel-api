@@ -23,7 +23,13 @@ variable "max_receive_count" {
 }
 
 variable "alarm_topic_arn" {
-  description = "Optional SNS topic for alarm notifications (e.g. one with your email). Empty: alarms show in the console only."
+  description = "Existing SNS topic for alarm notifications. Empty: use this module's alerts topic (alarm_email)."
+  type        = string
+  default     = ""
+}
+
+variable "alarm_email" {
+  description = "Email for alarm notifications; AWS sends a confirmation link first. Empty: no email subscription."
   type        = string
   default     = ""
 }

@@ -95,7 +95,8 @@ The SNS message attribute `eventType` carries the same type, for subscription fi
 | 2 subscriptions | Raw delivery, filter policy on the `eventType` attribute |
 | 2 queue policies | Only this topic may send to them |
 | IAM | travel-session role: `sns:Publish` on the topic, plus receive and delete on the notification queue only. New role `roam-recommendation-task`: receive and delete on its queue only. |
-| 4 CloudWatch alarms | Each DLQ not empty; each queue's oldest message over 5 minutes. Optional `alarm_topic_arn` for notifications. |
+| 4 CloudWatch alarms | Each DLQ not empty; each queue's oldest message over 5 minutes. They email on ALARM and on OK. |
+| SNS `roam-messaging-alerts` | Alarm emails to `alarm_email` (set in the gitignored `terraform.tfvars`; confirm the link AWS sends). Unencrypted on purpose: CloudWatch can't publish to topics using the AWS-managed SNS key. |
 
 **Cost:** SNS and SQS stay within the free tier (1M publishes and 1M requests a month; long polling two queues is about
 260k requests a month). The four alarms cost about $0.40/month.

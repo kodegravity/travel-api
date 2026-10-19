@@ -127,6 +127,43 @@ resource "aws_iam_role_policy" "recommendation_messaging" {
   })
 }
 
+# Alarm notifications by email. AWS emails a confirmation link; nothing is delivered until it is clicked.
+# Free: SNS includes 1,000 email notifications a month.
+# Not encrypted on purpose: CloudWatch cannot publish to a topic encrypted with the AWS-managed SNS key, and a
+# customer-managed key costs $1/month. Alarm notifications carry only alarm names and states.
+resource "aws_sns_topic" "alerts" {
+  name = "${var.name_prefix}-messaging-alerts"
+}
+
+# CloudWatch may publish to the encrypted alerts topic only for this account's alarms.
+resource "aws_sns_topic_policy" "alerts" {
+  arn = aws_sns_topic.alerts.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudWatchAlarms"
+      Effect    = "Allow"
+      Principal = { Service = "cloudwatch.amazonaws.com" }
+      Action    = "sns:Publish"
+      Resource  = aws_sns_topic.alerts.arn
+      Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
+    }]
+  })
+}
+
+resource "aws_sns_topic_subscription" "alert_email" {
+  count     = var.alarm_email == "" ? 0 : 1
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}
+
+data "aws_caller_identity" "current" {}
+
+locals {
+  alarm_actions = [var.alarm_topic_arn == "" ? aws_sns_topic.alerts.arn : var.alarm_topic_arn]
+}
+
 # Monitoring: anything in a dead-letter queue, or messages waiting too long (a consumer is down or failing).
 resource "aws_cloudwatch_metric_alarm" "dlq_not_empty" {
   for_each            = local.consumers
@@ -141,7 +178,8 @@ resource "aws_cloudwatch_metric_alarm" "dlq_not_empty" {
   threshold           = 0
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = var.alarm_topic_arn == "" ? [] : [var.alarm_topic_arn]
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "oldest_message_age" {
@@ -157,5 +195,6 @@ resource "aws_cloudwatch_metric_alarm" "oldest_message_age" {
   threshold           = 300
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = var.alarm_topic_arn == "" ? [] : [var.alarm_topic_arn]
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
 }
