@@ -1,5 +1,7 @@
 package com.aitravel.session.controller;
 
+import java.util.Set;
+
 import com.aitravel.session.dto.CreateTravelSessionRequest;
 import com.aitravel.session.dto.CreateTravelSessionResponse;
 import com.aitravel.session.dto.TravelSessionRecommendationResponse;
@@ -56,7 +58,9 @@ public class TravelSessionController {
             @Valid @RequestBody TravelSessionRefreshRequest request) {
         log.info("POST /api/v1/travel-sessions/{}/recommendations received", sessionId);
         TravelSessionRecommendationResponse response =
-                travelSessionService.refresh(sessionId, jwt.getSubject(), request.location());
+                travelSessionService.refresh(sessionId, jwt.getSubject(), request.location(),
+                        request.eventTypes() == null ? Set.of() : request.eventTypes(),
+                        request.seenEventIds() == null ? Set.of() : request.seenEventIds());
         log.info("POST /api/v1/travel-sessions/{}/recommendations completed status={} count={}",
                 sessionId, response.refreshStatus(), response.recommendations().size());
         return response;

@@ -3,11 +3,13 @@ package com.aitravel.places.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.aitravel.places.provider.AttractionProvider;
+import com.aitravel.places.provider.EventProvider;
 import com.aitravel.places.provider.GooglePlaceDetailsProvider;
 import com.aitravel.places.provider.GooglePlacesAttractionProvider;
 import com.aitravel.places.provider.GoogleRoutesProvider;
 import com.aitravel.places.provider.PlaceDetailsProvider;
 import com.aitravel.places.provider.RouteProvider;
+import com.aitravel.places.provider.TicketmasterEventProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,7 +24,9 @@ import org.springframework.test.context.TestPropertySource;
         JwtTestSupport.ISSUER_PROPERTY,
         JwtTestSupport.AUDIENCE_PROPERTY,
         "attraction.provider=google",
-        "google.places.api-key=test-key-not-real"
+        "google.places.api-key=test-key-not-real",
+        "events.provider=ticketmaster",
+        "events.api-key=test-key-not-real"
 })
 class GoogleProviderWiringTest {
 
@@ -35,10 +39,14 @@ class GoogleProviderWiringTest {
     @Autowired
     private RouteProvider routeProvider;
 
+    @Autowired
+    private EventProvider eventProvider;
+
     @Test
     void googleBeansAreCreated() {
         assertThat(attractionProvider).isInstanceOf(GooglePlacesAttractionProvider.class);
         assertThat(placeDetailsProvider).isInstanceOf(GooglePlaceDetailsProvider.class);
         assertThat(routeProvider).isInstanceOf(GoogleRoutesProvider.class);
+        assertThat(eventProvider).isInstanceOf(TicketmasterEventProvider.class);
     }
 }

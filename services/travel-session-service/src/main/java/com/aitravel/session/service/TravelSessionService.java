@@ -1,5 +1,10 @@
 package com.aitravel.session.service;
 
+import java.util.Set;
+import com.aitravel.session.model.Interest;
+import com.aitravel.session.dto.LiveSuggestionRequest;
+import com.aitravel.session.dto.LiveSuggestionDto;
+import com.aitravel.session.dto.LiveEventDto;
 import com.aitravel.session.config.TravelSessionProperties;
 import com.aitravel.session.dto.CreateTravelSessionRequest;
 import com.aitravel.session.dto.CreateTravelSessionResponse;
@@ -79,6 +84,15 @@ public class TravelSessionService {
     }
 
     public TravelSessionRecommendationResponse refresh(UUID sessionId, String ownerSubject, LocationRequest locationRequest) {
+        return refresh(sessionId, ownerSubject, locationRequest, Set.of(), Set.of());
+    }
+
+    /**
+     * Refreshes place recommendations and, when {@code eventTypes} is not empty, looks for live events of those
+     * kinds that the traveler has not seen. Live alerts are best effort: their failure never fails the refresh.
+     */
+    public TravelSessionRecommendationResponse refresh(UUID sessionId, String ownerSubject, LocationRequest locationRequest,
+                                                       Set<LiveEventDto.EventType> eventTypes, Set<String> seenEventIds) {
         Instant now = clock.instant();
         TravelSession session = requireActive(sessionId, ownerSubject, now);
 
@@ -97,7 +111,7 @@ public class TravelSessionService {
                 session.touch(now);
                 repository.save(session, retention());
                 log.info("Refresh skipped sessionId={} reason=movement-or-cooldown-not-met status=UNCHANGED", sessionId);
-                return response(sessionId, RefreshStatus.UNCHANGED, List.of(), now);
+                return response(sessionId, RefreshStatus.UNCHANGED, List.of(), now, List.of());
             }
 
             // The provider call runs without any session lock held.
@@ -131,8 +145,11 @@ public class TravelSessionService {
                 throw stateException(recorded.latest(), now);
             }
             RefreshStatus status = recommendations.isEmpty() ? RefreshStatus.NO_NEW_RESULTS : RefreshStatus.UPDATED;
-            log.info("Refresh completed sessionId={} status={} count={}", sessionId, status, recommendations.size());
-            return response(sessionId, status, recommendations, now);
+            List<LiveSuggestionDto> live = liveSuggestions(sessionId, locationRequest, snapshot.interests(), eventTypes,
+                    seenEventIds);
+            log.info("Refresh completed sessionId={} status={} count={} liveSuggestions={}", sessionId, status,
+                    recommendations.size(), live.size());
+            return response(sessionId, status, recommendations, now, live);
         } finally {
             repository.endRefresh(session);
         }
@@ -263,8 +280,24 @@ public class TravelSessionService {
     }
 
     private TravelSessionRecommendationResponse response(UUID sessionId, RefreshStatus status,
-                                                         List<RecommendationDto> recommendations, Instant now) {
-        return new TravelSessionRecommendationResponse(sessionId, status, recommendations, now);
+                                                         List<RecommendationDto> recommendations, Instant now,
+                                                         List<LiveSuggestionDto> liveSuggestions) {
+        return new TravelSessionRecommendationResponse(sessionId, status, recommendations, now, liveSuggestions);
+    }
+
+    /** Best effort, outside any session lock: an event-source or AI failure means no alerts this time. */
+    private List<LiveSuggestionDto> liveSuggestions(UUID sessionId, LocationRequest location, Set<Interest> interests,
+                                                    Set<LiveEventDto.EventType> eventTypes, Set<String> seenEventIds) {
+        if (eventTypes == null || eventTypes.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return recommendationService.liveSuggestions(new LiveSuggestionRequest(location, interests,
+                    Set.copyOf(eventTypes), seenEventIds == null ? Set.of() : Set.copyOf(seenEventIds)));
+        } catch (AttractionProviderException ex) {
+            log.warn("Live suggestions unavailable sessionId={}, refresh continues without them", sessionId);
+            return List.of();
+        }
     }
 
     private Duration inactivityTimeout() {

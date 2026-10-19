@@ -145,6 +145,35 @@ variable "ai_max_tokens" {
   default     = 500
 }
 
+variable "events_provider" {
+  description = "Live events in places-discovery: \"none\" (off), \"mock\" (sample events), or \"ticketmaster\" (free; needs a value in the Ticketmaster secret)."
+  type        = string
+  default     = "none"
+
+  validation {
+    condition     = contains(["none", "mock", "ticketmaster"], var.events_provider)
+    error_message = "events_provider must be \"none\", \"mock\", or \"ticketmaster\"."
+  }
+}
+
+variable "events_max_calls_per_day" {
+  description = "Hard cap on Ticketmaster calls per UTC day per task. The free tier allows 5,000."
+  type        = number
+  default     = 1000
+}
+
+variable "live_ai_max_calls_per_day" {
+  description = "Hard cap on OpenAI calls for live event alerts per UTC day per task. 100 is about $1/month at most on gpt-4o-mini."
+  type        = number
+  default     = 100
+}
+
+variable "ticketmaster_api_key_secret_name" {
+  description = "Secrets Manager secret holding the Ticketmaster API key (see ../secrets)."
+  type        = string
+  default     = "ai-travel-app/ticketmaster-api-key"
+}
+
 variable "google_places_api_key_secret_name" {
   description = "Secrets Manager secret holding the Google Places API key (see ../secrets)."
   type        = string

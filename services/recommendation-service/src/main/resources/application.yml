@@ -60,6 +60,12 @@ travel:
     max-calls-per-day: ${TRAVEL_AI_MAX_CALLS_PER_DAY:300}
     # Longest wait for one OpenAI reply. Past it, deterministic ranking is returned.
     timeout: ${TRAVEL_AI_TIMEOUT:4s}
+  live:
+    # Live event alerts in Travel Mode: events within this radius, starting within these hours.
+    radius-km: ${TRAVEL_LIVE_RADIUS_KM:5}
+    hours: ${TRAVEL_LIVE_HOURS:6}
+    # Hard cap on OpenAI calls for live alerts per UTC day, per task. Past it, rule-based picks are used.
+    ai-max-calls-per-day: ${TRAVEL_LIVE_AI_MAX_CALLS_PER_DAY:100}
 
 management:
   endpoints:

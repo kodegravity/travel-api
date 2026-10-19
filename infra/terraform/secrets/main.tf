@@ -11,6 +11,11 @@ resource "aws_secretsmanager_secret" "google_places_api_key" {
   description = "Google Places API key for the places-discovery service."
 }
 
+resource "aws_secretsmanager_secret" "ticketmaster_api_key" {
+  name        = "ai-travel-app/ticketmaster-api-key"
+  description = "Ticketmaster Discovery API consumer key for live events in places-discovery (free tier). Plain text."
+}
+
 # Browser key for the Google Maps JavaScript API. Read only by the web app's dev script (it ends up in the
 # browser by design, so it must be restricted in Google Cloud to the site's referrers and the Maps JavaScript API).
 # No ECS task reads it.
@@ -31,6 +36,7 @@ resource "aws_iam_role_policy" "ecs_execution_read_secrets" {
       Resource = [
         aws_secretsmanager_secret.openai_api_key.arn,
         aws_secretsmanager_secret.google_places_api_key.arn,
+        aws_secretsmanager_secret.ticketmaster_api_key.arn,
       ]
     }]
   })

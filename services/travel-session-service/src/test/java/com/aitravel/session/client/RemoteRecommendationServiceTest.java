@@ -94,4 +94,38 @@ class RemoteRecommendationServiceTest {
                 .isInstanceOf(AttractionProviderException.class)
                 .hasMessageContaining("could not be reached");
     }
+
+    @Test
+    void postsLiveSuggestionRequestAndReadsAlerts() {
+        server.expect(requestTo(BASE_URL + "/internal/v1/live-suggestions"))
+                .andExpect(method(org.springframework.http.HttpMethod.POST))
+                .andExpect(jsonPath("$.eventTypes[0]").value("SPORTS"))
+                .andExpect(jsonPath("$.excludedEventIds[0]").value("C1"))
+                .andRespond(withSuccess("""
+                        {"suggestions": [{"event": {"id": "G1", "name": "Derby", "type": "SPORTS",
+                          "startsAt": "2026-11-14T20:00:00Z", "distanceKm": 4.2, "source": "ticketmaster"},
+                          "headline": "Game nearby: Derby", "message": "Bernabéu, about 4.2 km from you.", "aiWritten": false}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var alerts = service.liveSuggestions(new com.aitravel.session.dto.LiveSuggestionRequest(
+                new com.aitravel.session.dto.LocationRequest(new BigDecimal("40.4169"), new BigDecimal("-3.7035")),
+                Set.of(com.aitravel.session.model.Interest.ART),
+                Set.of(com.aitravel.session.dto.LiveEventDto.EventType.SPORTS), Set.of("C1")));
+
+        assertThat(alerts).singleElement().satisfies(alert -> {
+            assertThat(alert.event().id()).isEqualTo("G1");
+            assertThat(alert.event().startsAt()).isEqualTo(java.time.Instant.parse("2026-11-14T20:00:00Z"));
+            assertThat(alert.headline()).isEqualTo("Game nearby: Derby");
+        });
+    }
+
+    @Test
+    void liveSuggestionFailuresBecomeProviderExceptions() {
+        server.expect(requestTo(BASE_URL + "/internal/v1/live-suggestions")).andRespond(withServerError());
+
+        assertThatThrownBy(() -> service.liveSuggestions(new com.aitravel.session.dto.LiveSuggestionRequest(
+                new com.aitravel.session.dto.LocationRequest(new BigDecimal("40.4"), new BigDecimal("-3.7")),
+                Set.of(), Set.of(com.aitravel.session.dto.LiveEventDto.EventType.MUSIC), Set.of())))
+                .isInstanceOf(AttractionProviderException.class);
+    }
 }

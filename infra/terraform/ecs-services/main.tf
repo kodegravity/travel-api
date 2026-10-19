@@ -7,6 +7,10 @@ data "aws_secretsmanager_secret" "openai_api_key" {
   name = var.openai_api_key_secret_name
 }
 
+data "aws_secretsmanager_secret" "ticketmaster_api_key" {
+  name = var.ticketmaster_api_key_secret_name
+}
+
 data "aws_ecs_cluster" "this" {
   cluster_name = var.cluster_name
 }
@@ -44,13 +48,20 @@ resource "aws_ecs_task_definition" "places_discovery" {
         { name = "GOOGLE_PLACES_MAX_CALLS_PER_DAY", value = tostring(var.google_places_max_calls_per_day) },
         { name = "GOOGLE_ROUTES_MAX_CALLS_PER_DAY", value = tostring(var.google_routes_max_calls_per_day) },
         { name = "GOOGLE_PLACE_PHOTOS_MAX_CALLS_PER_DAY", value = tostring(var.google_place_photos_max_calls_per_day) },
+        { name = "EVENTS_PROVIDER", value = var.events_provider },
+        { name = "EVENTS_MAX_CALLS_PER_DAY", value = tostring(var.events_max_calls_per_day) },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)
       # ECS cannot start a task whose secret has no value, so the key is injected only when Google is enabled.
-      secrets = var.attraction_provider == "google" ? [
-        { name = "GOOGLE_PLACES_API_KEY", valueFrom = data.aws_secretsmanager_secret.google_places_api_key.arn },
-      ] : []
+      secrets = concat(
+        var.attraction_provider == "google" ? [
+          { name = "GOOGLE_PLACES_API_KEY", valueFrom = data.aws_secretsmanager_secret.google_places_api_key.arn },
+        ] : [],
+        var.events_provider == "ticketmaster" ? [
+          { name = "TICKETMASTER_API_KEY", valueFrom = data.aws_secretsmanager_secret.ticketmaster_api_key.arn },
+        ] : [],
+      )
       stopTimeout    = 30
       mountPoints    = []
       volumesFrom    = []
@@ -100,6 +111,7 @@ resource "aws_ecs_task_definition" "recommendation" {
         { name = "TRAVEL_AI_ENABLED", value = tostring(var.ai_enabled) },
         { name = "TRAVEL_AI_MAX_CALLS_PER_DAY", value = tostring(var.ai_max_calls_per_day) },
         { name = "TRAVEL_AI_MAX_TOKENS", value = tostring(var.ai_max_tokens) },
+        { name = "TRAVEL_LIVE_AI_MAX_CALLS_PER_DAY", value = tostring(var.live_ai_max_calls_per_day) },
         { name = "PLACES_DISCOVERY_BASE_URL", value = "http://places-discovery:8082" },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },

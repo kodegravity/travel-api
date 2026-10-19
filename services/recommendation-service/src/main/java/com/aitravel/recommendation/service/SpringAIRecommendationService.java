@@ -165,7 +165,7 @@ public class SpringAIRecommendationService implements AIRecommendationService {
         return List.copyOf(result);
     }
 
-    static boolean inventsFacts(String reason) {
+    public static boolean inventsFacts(String reason) {
         return CLOCK_TIME.matcher(reason).find()
                 || OPENING_CLAIM.matcher(reason).find()
                 || PRICE_CLAIM.matcher(reason).find();

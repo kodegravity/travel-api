@@ -1,5 +1,8 @@
 package com.aitravel.session.client;
 
+import java.util.List;
+import com.aitravel.session.dto.LiveSuggestionRequest;
+import com.aitravel.session.dto.LiveSuggestionDto;
 import com.aitravel.session.dto.RecommendationRequest;
 import com.aitravel.session.dto.RecommendationResponse;
 import com.aitravel.session.exception.AttractionProviderException;
@@ -25,6 +28,7 @@ public class RemoteRecommendationService implements RecommendationService {
 
     private static final Logger log = LoggerFactory.getLogger(RemoteRecommendationService.class);
     static final String RECOMMENDATIONS_PATH = "/internal/v1/recommendations";
+    static final String LIVE_SUGGESTIONS_PATH = "/internal/v1/live-suggestions";
 
     private final RestClient restClient;
 
@@ -51,6 +55,33 @@ public class RemoteRecommendationService implements RecommendationService {
         }
         log.info("Recommendation service responded count={} elapsedMs={}", response.recommendations().size(), elapsedMs);
         return response;
+    }
+
+    @Override
+    public List<LiveSuggestionDto> liveSuggestions(LiveSuggestionRequest request) {
+        log.info("Requesting live suggestions types={} excluded={}", request.eventTypes().size(),
+                request.excludedEventIds().size());
+        try {
+            LiveSuggestionsResponse response = restClient.post()
+                    .uri(LIVE_SUGGESTIONS_PATH)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(LiveSuggestionsResponse.class);
+            return response == null || response.suggestions() == null ? List.of() : response.suggestions();
+        } catch (RestClientResponseException ex) {
+            log.warn("Live suggestions failed with HTTP status {}", ex.getStatusCode().value());
+            throw new AttractionProviderException("Recommendation Service failed with HTTP " + ex.getStatusCode().value(), ex);
+        } catch (ResourceAccessException ex) {
+            log.warn("Recommendation Service could not be reached ({})", ex.getClass().getSimpleName());
+            throw new AttractionProviderException("Recommendation Service could not be reached", ex);
+        } catch (RestClientException ex) {
+            log.warn("Live suggestions could not be read ({})", ex.getClass().getSimpleName());
+            throw new AttractionProviderException("Recommendation Service response could not be read", ex);
+        }
+    }
+
+    record LiveSuggestionsResponse(List<LiveSuggestionDto> suggestions) {
     }
 
     private RecommendationResponse post(RecommendationSearchRequest body) {

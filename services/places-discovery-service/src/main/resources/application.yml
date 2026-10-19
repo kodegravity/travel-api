@@ -52,6 +52,14 @@ google:
     # 20/day stays inside the free 1,000/month even at the Compute Routes Enterprise rate.
     max-calls-per-day: ${GOOGLE_ROUTES_MAX_CALLS_PER_DAY:20}
 
+events:
+  # "mock" (default, sample events, no key), "ticketmaster" (free API key), or "none".
+  provider: ${EVENTS_PROVIDER:mock}
+  # Required when events.provider=ticketmaster. Supply via the environment; never commit a key.
+  api-key: ${TICKETMASTER_API_KEY:}
+  # Hard cap on Ticketmaster calls per UTC day, per task. The free tier allows 5,000.
+  max-calls-per-day: ${EVENTS_MAX_CALLS_PER_DAY:1000}
+
 management:
   endpoints:
     web:

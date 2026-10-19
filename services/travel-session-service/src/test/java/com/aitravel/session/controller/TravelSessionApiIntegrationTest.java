@@ -241,4 +241,32 @@ class TravelSessionApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recommendations").isArray());
     }
+
+    @Test
+    void refreshPassesLiveEventOptionsAndAlwaysReturnsTheAlertList() throws Exception {
+        String id = createSession();
+
+        mockMvc.perform(post(BASE + "/" + id + "/recommendations").contentType("application/json")
+                        .content("{\"location\": " + NEAR_ROME + ", \"eventTypes\": [\"SPORTS\", \"MUSIC\"],"
+                                + " \"seenEventIds\": [\"G1\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.liveSuggestions").isArray());
+
+        org.mockito.Mockito.verify(recommendationService).liveSuggestions(org.mockito.ArgumentMatchers.argThat(request ->
+                request.eventTypes().size() == 2 && request.excludedEventIds().equals(java.util.Set.of("G1"))));
+    }
+
+    @Test
+    void rejectsInvalidLiveEventOptions() throws Exception {
+        String id = createSession();
+
+        mockMvc.perform(post(BASE + "/" + id + "/recommendations").contentType("application/json")
+                        .content("{\"location\": " + NEAR_ROME + ", \"eventTypes\": [\"PARTY\"]}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post(BASE + "/" + id + "/recommendations").contentType("application/json")
+                        .content("{\"location\": " + NEAR_ROME + ", \"eventTypes\": [\"SPORTS\"],"
+                                + " \"seenEventIds\": [\"../etc\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation failed"));
+    }
 }
