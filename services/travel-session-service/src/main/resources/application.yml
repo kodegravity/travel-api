@@ -1,4 +1,11 @@
 spring:
+  cloud:
+    aws:
+      # Spring Cloud AWS clients exist only with messaging on; credentials and region come from the default chain.
+      sns:
+        enabled: ${TRAVEL_MESSAGING_ENABLED:false}
+      sqs:
+        enabled: ${TRAVEL_MESSAGING_ENABLED:false}
   application:
     name: travel-session-service
   lifecycle:
@@ -20,6 +27,14 @@ recommendation-service:
   read-timeout: 10s
 
 travel:
+  messaging:
+    # Event-driven messaging (SNS out, SQS in). Off by default: no outbox writes, publishing, or consuming.
+    enabled: ${TRAVEL_MESSAGING_ENABLED:false}
+    # The travel events topic, from Terraform (infra/terraform/messaging). Required when enabled.
+    topic-arn: ${TRAVEL_MESSAGING_TOPIC_ARN:}
+    notification-queue: ${TRAVEL_MESSAGING_NOTIFICATION_QUEUE:roam-notification-events}
+    # How often the outbox relay sweeps for events the fast path could not publish.
+    relay-interval-ms: ${TRAVEL_MESSAGING_RELAY_INTERVAL_MS:30000}
   warmup:
     # Background warm-up after startup (Okta keys, first downstream connection).
     enabled: ${TRAVEL_WARMUP_ENABLED:true}

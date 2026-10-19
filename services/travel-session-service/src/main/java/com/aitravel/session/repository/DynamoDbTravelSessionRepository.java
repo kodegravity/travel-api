@@ -1,5 +1,7 @@
 package com.aitravel.session.repository;
 
+import com.aitravel.session.messaging.OutboxEntry;
+import com.aitravel.session.messaging.OutboxStore;
 import com.aitravel.session.model.Interest;
 import com.aitravel.session.model.Location;
 import com.aitravel.session.model.TravelSession;
@@ -25,9 +27,13 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.Put;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 import software.amazon.awssdk.services.dynamodb.model.Select;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
+import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
+import software.amazon.awssdk.services.dynamodb.model.Update;
 
 /**
  * DynamoDB session store ({@code travel.session.store=dynamodb}). Sessions survive restarts and are shared by every
@@ -43,7 +49,7 @@ import software.amazon.awssdk.services.dynamodb.model.Select;
  * <p>The capacity check counts active sessions with a scan, which is fine for a small table. It is not atomic across
  * tasks, so simultaneous creates can exceed the limit by a few.
  */
-public class DynamoDbTravelSessionRepository implements TravelSessionRepository {
+public class DynamoDbTravelSessionRepository implements TravelSessionRepository, OutboxStore {
 
     private static final Logger log = LoggerFactory.getLogger(DynamoDbTravelSessionRepository.class);
 
@@ -67,6 +73,13 @@ public class DynamoDbTravelSessionRepository implements TravelSessionRepository 
     static final String PURGE_AT = "purgeAt";
     static final String LEASE_UNTIL = "refreshLeaseUntil";
     static final String LEASE_TOKEN = "refreshLeaseToken";
+    /** Outbox items share the table under this key prefix; session keys are UUIDs, so they never collide. */
+    static final String OUTBOX_PREFIX = "outbox#";
+    static final String OUTBOX_TYPE = "outboxEventType";
+    static final String OUTBOX_JSON = "outboxEnvelope";
+    static final String OUTBOX_CREATED_AT = "outboxCreatedAt";
+    /** Unpublished outbox items are kept at most this long (TTL), so a long outage cannot grow the table forever. */
+    static final Duration OUTBOX_RETENTION = Duration.ofDays(7);
 
     /** Attributes that are absent when unknown or wiped; a save removes them when they have no value. */
     private static final List<String> OPTIONAL = List.of(INTERESTS, MAX_BUDGET, CURRENCY, AVAILABLE_MINUTES,
@@ -98,19 +111,25 @@ public class DynamoDbTravelSessionRepository implements TravelSessionRepository 
 
     @Override
     public boolean addIfCapacity(TravelSession session, int maxActive, Instant now, Duration retentionAfterExpiry) {
+        return addIfCapacity(session, maxActive, now, retentionAfterExpiry, List.of());
+    }
+
+    @Override
+    public boolean addIfCapacity(TravelSession session, int maxActive, Instant now, Duration retentionAfterExpiry,
+                                 List<OutboxEntry> outbox) {
         long active = countActive(now);
         if (active >= maxActive) {
             log.info("Session store at capacity active={} max={}", active, maxActive);
             return false;
         }
         TravelSession.State state = withVersion(session.state(), 1);
-        try {
-            dynamoDb.putItem(r -> r.tableName(tableName)
-                    .item(toItem(state, retentionAfterExpiry))
-                    .conditionExpression("attribute_not_exists(#id)")
-                    .expressionAttributeNames(Map.of("#id", SESSION_ID)));
-        } catch (ConditionalCheckFailedException ex) {
-            // A random UUID collision is practically impossible; refuse rather than overwrite.
+        Put put = Put.builder().tableName(tableName)
+                .item(toItem(state, retentionAfterExpiry))
+                .conditionExpression("attribute_not_exists(#id)")
+                .expressionAttributeNames(Map.of("#id", SESSION_ID))
+                .build();
+        // A random UUID collision is practically impossible; refuse rather than overwrite.
+        if (!write(TransactWriteItem.builder().put(put).build(), outbox)) {
             return false;
         }
         session.markSaved(1);
@@ -119,6 +138,11 @@ public class DynamoDbTravelSessionRepository implements TravelSessionRepository 
 
     @Override
     public boolean save(TravelSession session, Duration retentionAfterExpiry) {
+        return save(session, retentionAfterExpiry, List.of());
+    }
+
+    @Override
+    public boolean save(TravelSession session, Duration retentionAfterExpiry, List<OutboxEntry> outbox) {
         TravelSession.State state = session.state();
         long expected = state.version();
         long next = expected + 1;
@@ -147,18 +171,115 @@ public class DynamoDbTravelSessionRepository implements TravelSessionRepository 
         values.put(":expected", AttributeValue.fromN(Long.toString(expected)));
 
         String update = "SET " + String.join(", ", sets) + (removes.isEmpty() ? "" : " REMOVE " + String.join(", ", removes));
-        try {
-            dynamoDb.updateItem(r -> r.tableName(tableName)
-                    .key(key(state.sessionId()))
-                    .updateExpression(update)
-                    .conditionExpression("attribute_exists(#id) AND #ver = :expected")
-                    .expressionAttributeNames(names)
-                    .expressionAttributeValues(values));
-        } catch (ConditionalCheckFailedException ex) {
+        Update change = Update.builder().tableName(tableName)
+                .key(key(state.sessionId()))
+                .updateExpression(update)
+                .conditionExpression("attribute_exists(#id) AND #ver = :expected")
+                .expressionAttributeNames(names)
+                .expressionAttributeValues(values)
+                .build();
+        if (!write(TransactWriteItem.builder().update(change).build(), outbox)) {
             return false;
         }
         session.markSaved(next);
         return true;
+    }
+
+    /**
+     * Applies the session write alone, as before, or with the outbox entries in one transaction: both happen or
+     * neither. False when the session's condition failed.
+     */
+    private boolean write(TransactWriteItem sessionWrite, List<OutboxEntry> outbox) {
+        try {
+            if (outbox.isEmpty()) {
+                if (sessionWrite.put() != null) {
+                    Put put = sessionWrite.put();
+                    dynamoDb.putItem(r -> r.tableName(put.tableName()).item(put.item())
+                            .conditionExpression(put.conditionExpression())
+                            .expressionAttributeNames(put.expressionAttributeNames()));
+                } else {
+                    Update u = sessionWrite.update();
+                    dynamoDb.updateItem(r -> r.tableName(u.tableName()).key(u.key())
+                            .updateExpression(u.updateExpression())
+                            .conditionExpression(u.conditionExpression())
+                            .expressionAttributeNames(u.expressionAttributeNames())
+                            .expressionAttributeValues(u.expressionAttributeValues()));
+                }
+                return true;
+            }
+            List<TransactWriteItem> items = new ArrayList<>();
+            items.add(sessionWrite);
+            outbox.forEach(entry -> items.add(TransactWriteItem.builder().put(outboxPut(entry)).build()));
+            dynamoDb.transactWriteItems(r -> r.transactItems(items));
+            return true;
+        } catch (ConditionalCheckFailedException ex) {
+            return false;
+        } catch (TransactionCanceledException ex) {
+            // The session's condition failing is the normal "someone else saved first"; anything else is an error.
+            boolean conditionFailed = ex.hasCancellationReasons() && ex.cancellationReasons().stream()
+                    .anyMatch(reason -> "ConditionalCheckFailed".equals(reason.code()));
+            if (conditionFailed) {
+                return false;
+            }
+            throw ex;
+        }
+    }
+
+    private Put outboxPut(OutboxEntry entry) {
+        return Put.builder().tableName(tableName)
+                .item(Map.of(
+                        SESSION_ID, AttributeValue.fromS(OUTBOX_PREFIX + entry.eventId()),
+                        OUTBOX_TYPE, AttributeValue.fromS(entry.eventType()),
+                        OUTBOX_JSON, AttributeValue.fromS(entry.json()),
+                        OUTBOX_CREATED_AT, millis(entry.createdAt()),
+                        PURGE_AT, AttributeValue.fromN(Long.toString(entry.createdAt().plus(OUTBOX_RETENTION).getEpochSecond()))))
+                .conditionExpression("attribute_not_exists(#id)")
+                .expressionAttributeNames(Map.of("#id", SESSION_ID))
+                .build();
+    }
+
+    @Override
+    public void addOutbox(List<OutboxEntry> entries) {
+        for (OutboxEntry entry : entries) {
+            Put put = outboxPut(entry);
+            dynamoDb.putItem(r -> r.tableName(put.tableName()).item(put.item())
+                    .conditionExpression(put.conditionExpression())
+                    .expressionAttributeNames(put.expressionAttributeNames()));
+        }
+    }
+
+    /** Outbox items are few and short-lived, so a filtered scan of this small table is cheap. */
+    @Override
+    public List<OutboxEntry> pendingOutbox(Instant olderThan, int limit) {
+        List<OutboxEntry> found = new ArrayList<>();
+        Map<String, AttributeValue> startKey = null;
+        do {
+            ScanRequest.Builder request = ScanRequest.builder()
+                    .tableName(tableName)
+                    .filterExpression("begins_with(#id, :prefix) AND #created < :cutoff")
+                    .expressionAttributeNames(Map.of("#id", SESSION_ID, "#created", OUTBOX_CREATED_AT))
+                    .expressionAttributeValues(Map.of(
+                            ":prefix", AttributeValue.fromS(OUTBOX_PREFIX),
+                            ":cutoff", millis(olderThan)));
+            if (startKey != null) {
+                request.exclusiveStartKey(startKey);
+            }
+            ScanResponse response = dynamoDb.scan(request.build());
+            for (Map<String, AttributeValue> item : response.items()) {
+                found.add(new OutboxEntry(item.get(SESSION_ID).s().substring(OUTBOX_PREFIX.length()),
+                        item.get(OUTBOX_TYPE).s(), item.get(OUTBOX_JSON).s(),
+                        Instant.ofEpochMilli(Long.parseLong(item.get(OUTBOX_CREATED_AT).n()))));
+            }
+            startKey = response.hasLastEvaluatedKey() && !response.lastEvaluatedKey().isEmpty()
+                    ? response.lastEvaluatedKey() : null;
+        } while (startKey != null && found.size() < limit);
+        return found.stream().sorted(java.util.Comparator.comparing(OutboxEntry::createdAt)).limit(limit).toList();
+    }
+
+    @Override
+    public void removeOutbox(String eventId) {
+        dynamoDb.deleteItem(r -> r.tableName(tableName)
+                .key(Map.of(SESSION_ID, AttributeValue.fromS(OUTBOX_PREFIX + eventId))));
     }
 
     @Override

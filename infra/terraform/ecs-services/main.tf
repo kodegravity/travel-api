@@ -94,6 +94,8 @@ resource "aws_ecs_task_definition" "recommendation" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = var.execution_role_arn
+  # Set once the messaging module exists: lets recommendation consume its SQS queue.
+  task_role_arn = var.recommendation_task_role_arn == "" ? null : var.recommendation_task_role_arn
 
   runtime_platform {
     cpu_architecture        = "X86_64"
@@ -115,6 +117,8 @@ resource "aws_ecs_task_definition" "recommendation" {
         { name = "TRAVEL_LIVE_AI_MAX_CALLS_PER_DAY", value = tostring(var.live_ai_max_calls_per_day) },
         { name = "TRAVEL_AI_TIMEOUT", value = var.ai_timeout },
         { name = "TRAVEL_CHAT_AI_MAX_CALLS_PER_DAY", value = tostring(var.chat_ai_max_calls_per_day) },
+        { name = "TRAVEL_MESSAGING_ENABLED", value = tostring(var.messaging_enabled) },
+        { name = "TRAVEL_MESSAGING_SESSION_QUEUE", value = var.recommendation_queue_name },
         { name = "PLACES_DISCOVERY_BASE_URL", value = "http://places-discovery:8082" },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
@@ -171,6 +175,9 @@ resource "aws_ecs_task_definition" "travel_session" {
         { name = "SERVER_PORT", value = "8080" },
         { name = "RECOMMENDATION_SERVICE_BASE_URL", value = "http://recommendation:8081" },
         { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
+        { name = "TRAVEL_MESSAGING_ENABLED", value = tostring(var.messaging_enabled) },
+        { name = "TRAVEL_MESSAGING_TOPIC_ARN", value = var.messaging_topic_arn },
+        { name = "TRAVEL_MESSAGING_NOTIFICATION_QUEUE", value = var.notification_queue_name },
         { name = "TRAVEL_SESSION_STORE", value = "dynamodb" },
         { name = "TRAVEL_SESSION_TABLE", value = var.session_table_name },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },

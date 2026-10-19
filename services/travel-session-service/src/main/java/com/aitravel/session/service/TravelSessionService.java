@@ -1,13 +1,11 @@
 package com.aitravel.session.service;
 
-import java.util.Set;
-import com.aitravel.session.model.Interest;
-import com.aitravel.session.dto.LiveSuggestionRequest;
-import com.aitravel.session.dto.LiveSuggestionDto;
-import com.aitravel.session.dto.LiveEventDto;
 import com.aitravel.session.config.TravelSessionProperties;
 import com.aitravel.session.dto.CreateTravelSessionRequest;
 import com.aitravel.session.dto.CreateTravelSessionResponse;
+import com.aitravel.session.dto.LiveEventDto;
+import com.aitravel.session.dto.LiveSuggestionDto;
+import com.aitravel.session.dto.LiveSuggestionRequest;
 import com.aitravel.session.dto.LocationRequest;
 import com.aitravel.session.dto.RecommendationDto;
 import com.aitravel.session.dto.RecommendationRequest;
@@ -15,9 +13,17 @@ import com.aitravel.session.dto.RecommendationResponse;
 import com.aitravel.session.dto.RefreshStatus;
 import com.aitravel.session.dto.TravelSessionRecommendationResponse;
 import com.aitravel.session.exception.AttractionProviderException;
-import com.aitravel.session.exception.TravelSessionException;
 import com.aitravel.session.exception.TravelSessionException.Reason;
+import com.aitravel.session.exception.TravelSessionException;
 import com.aitravel.session.logging.LogIds;
+import com.aitravel.session.messaging.EventOutbox;
+import com.aitravel.session.messaging.EventType;
+import com.aitravel.session.messaging.OutboxEntry;
+import com.aitravel.session.messaging.events.NearbyEventDiscovered;
+import com.aitravel.session.messaging.events.RecommendationsReady;
+import com.aitravel.session.messaging.events.TravelSessionEnded;
+import com.aitravel.session.messaging.events.TravelSessionStarted;
+import com.aitravel.session.model.Interest;
 import com.aitravel.session.model.Location;
 import com.aitravel.session.model.TravelSession;
 import com.aitravel.session.model.TravelSessionStatus;
@@ -28,10 +34,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -49,15 +57,27 @@ public class TravelSessionService {
     private final RecommendationService recommendationService;
     private final TravelSessionProperties properties;
     private final Clock clock;
+    /** Events for SNS, written atomically with the session change that causes them. Does nothing while disabled. */
+    private final EventOutbox outbox;
 
     public TravelSessionService(TravelSessionRepository repository,
                                 RecommendationService recommendationService,
                                 TravelSessionProperties properties,
                                 Clock clock) {
+        this(repository, recommendationService, properties, clock, EventOutbox.disabled());
+    }
+
+    @Autowired
+    public TravelSessionService(TravelSessionRepository repository,
+                                RecommendationService recommendationService,
+                                TravelSessionProperties properties,
+                                Clock clock,
+                                EventOutbox outbox) {
         this.repository = repository;
         this.recommendationService = recommendationService;
         this.properties = properties;
         this.clock = clock;
+        this.outbox = outbox;
     }
 
     public CreateTravelSessionResponse create(CreateTravelSessionRequest request, String ownerSubject) {
@@ -75,10 +95,14 @@ public class TravelSessionService {
 
         log.debug("Creating session sessionId={} owner={} maxBudget={} currency={} expiresAt={}",
                 session.sessionId(), LogIds.subject(ownerSubject), request.maxBudget(), request.currencyCode(), session.expiresAt());
-        if (!repository.addIfCapacity(session, properties.maxActiveSessions(), now, retention())) {
+        List<OutboxEntry> events = outbox.prepare(EventType.TRAVEL_SESSION_STARTED, new TravelSessionStarted(
+                session.sessionId().toString(), LogIds.subject(ownerSubject), request.interests(), request.currencyCode(),
+                request.availableMinutes()));
+        if (!repository.addIfCapacity(session, properties.maxActiveSessions(), now, retention(), events)) {
             log.warn("Session capacity reached, rejecting new session owner={}", LogIds.subject(ownerSubject));
             throw new TravelSessionException(Reason.CAPACITY_REACHED);
         }
+        outbox.afterCommit(events);
         log.info("Travel session created sessionId={} owner={}", session.sessionId(), LogIds.subject(ownerSubject));
         return new CreateTravelSessionResponse(session.sessionId(), TravelSessionStatus.ACTIVE, session.expiresAt());
     }
@@ -139,14 +163,23 @@ public class TravelSessionService {
                     .toList();
 
             // A stop or expiry that happened during the provider call discards this result.
-            Update recorded = update(session, s -> s.recordEvaluation(current, now, placeIds));
+            List<OutboxEntry> ready = placeIds.isEmpty() ? List.of() : outbox.prepare(EventType.RECOMMENDATIONS_READY,
+                    new RecommendationsReady(sessionId.toString(), placeIds, "refresh"));
+            Update recorded = update(session, s -> s.recordEvaluation(current, now, placeIds), ready);
             if (!recorded.applied()) {
                 log.info("Refresh result discarded, session ended during provider call sessionId={}", sessionId);
                 throw stateException(recorded.latest(), now);
             }
+            outbox.afterCommit(ready);
             RefreshStatus status = recommendations.isEmpty() ? RefreshStatus.NO_NEW_RESULTS : RefreshStatus.UPDATED;
             List<LiveSuggestionDto> live = liveSuggestions(sessionId, locationRequest, snapshot.interests(), eventTypes,
                     seenEventIds);
+            if (!live.isEmpty()) {
+                outbox.publishStandalone(EventType.NEARBY_EVENT_DISCOVERED, new NearbyEventDiscovered(sessionId.toString(),
+                        live.stream().map(item -> new NearbyEventDiscovered.Event(item.event().id(), item.event().name(),
+                                item.event().type() == null ? null : item.event().type().name(), item.event().venueName(),
+                                item.event().startsAt(), item.headline())).toList()));
+            }
             log.info("Refresh completed sessionId={} status={} count={} liveSuggestions={}", sessionId, status,
                     recommendations.size(), live.size());
             return response(sessionId, status, recommendations, now, live);
@@ -159,6 +192,10 @@ public class TravelSessionService {
     public void stop(UUID sessionId, String ownerSubject) {
         Instant now = clock.instant();
         TravelSession session = find(sessionId, ownerSubject);
+        List<OutboxEntry> ended = outbox.prepare(EventType.TRAVEL_SESSION_ENDED,
+                new TravelSessionEnded(sessionId.toString(), "STOPPED"));
+        // Stopping an already stopped session publishes nothing.
+        boolean wasActive = session.status() == TravelSessionStatus.ACTIVE;
         Update stopped = update(session, s -> {
             s.expireIfDue(now);
             if (s.status() == TravelSessionStatus.EXPIRED) {
@@ -166,7 +203,10 @@ public class TravelSessionService {
             }
             s.stop();
             return true;
-        });
+        }, wasActive ? ended : List.of());
+        if (stopped.applied() && wasActive) {
+            outbox.afterCommit(ended);
+        }
         if (!stopped.applied()) {
             persistExpiry(stopped.latest());
             log.info("Stop rejected, session already expired sessionId={}", sessionId);
@@ -208,7 +248,11 @@ public class TravelSessionService {
         TravelSessionStatus before = session.status();
         session.expireIfDue(now);
         if (before == TravelSessionStatus.ACTIVE && session.status() == TravelSessionStatus.EXPIRED) {
-            persistExpiry(session);
+            List<OutboxEntry> ended = outbox.prepare(EventType.TRAVEL_SESSION_ENDED,
+                    new TravelSessionEnded(sessionId.toString(), "EXPIRED"));
+            if (repository.save(session, retention(), ended)) {
+                outbox.afterCommit(ended);
+            }
         }
         if (session.status() != TravelSessionStatus.ACTIVE) {
             log.info("Request rejected, session is not active sessionId={} status={}", sessionId, session.status());
@@ -239,12 +283,17 @@ public class TravelSessionService {
      * applies (for example the session has ended); nothing is saved then.
      */
     private Update update(TravelSession session, Predicate<TravelSession> change) {
+        return update(session, change, List.of());
+    }
+
+    /** As {@link #update(TravelSession, Predicate)}, writing {@code events} atomically with the change. */
+    private Update update(TravelSession session, Predicate<TravelSession> change, List<OutboxEntry> events) {
         TravelSession current = session;
         for (int attempt = 1; attempt <= MAX_UPDATE_ATTEMPTS; attempt++) {
             if (!change.test(current)) {
                 return new Update(false, current);
             }
-            if (repository.save(current, retention())) {
+            if (repository.save(current, retention(), events)) {
                 return new Update(true, current);
             }
             log.info("Session changed concurrently, retrying sessionId={} attempt={}", current.sessionId(), attempt);

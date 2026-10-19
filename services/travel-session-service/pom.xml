@@ -25,6 +25,7 @@
         <jackson-bom.version>3.1.7</jackson-bom.version>
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
         <aws-sdk.version>2.55.11</aws-sdk.version>
+        <spring-cloud-aws.version>4.0.2</spring-cloud-aws.version>
     </properties>
 
     <dependencyManagement>
@@ -36,10 +37,51 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- After the AWS SDK BOM, so the SDK version above wins. 4.0.x targets Spring Boot 4 and Jackson 3. -->
+            <dependency>
+                <groupId>io.awspring.cloud</groupId>
+                <artifactId>spring-cloud-aws-dependencies</artifactId>
+                <version>${spring-cloud-aws.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <dependencies>
+        <!-- SNS publishing and SQS listeners for event-driven messaging (off unless TRAVEL_MESSAGING_ENABLED=true). -->
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sns</artifactId>
+            <!-- Same as dynamodb: no Apache clients (Trivy flagged httpcore5). SNS uses url-connection-client; the
+                 SQS listener's async client uses netty-nio-client. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
+            <!-- Same as dynamodb: no Apache clients (Trivy flagged httpcore5). SNS uses url-connection-client; the
+                 SQS listener's async client uses netty-nio-client. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>

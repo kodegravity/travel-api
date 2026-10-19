@@ -1,8 +1,13 @@
 package com.aitravel.session.repository;
 
+import com.aitravel.session.messaging.OutboxEntry;
+import com.aitravel.session.messaging.OutboxStore;
 import com.aitravel.session.model.TravelSession;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,9 +23,10 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 @ConditionalOnProperty(prefix = "travel.session", name = "store", havingValue = "memory", matchIfMissing = true)
-public class InMemoryTravelSessionRepository implements TravelSessionRepository {
+public class InMemoryTravelSessionRepository implements TravelSessionRepository, OutboxStore {
 
     private final ConcurrentHashMap<UUID, TravelSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, OutboxEntry> outbox = new ConcurrentHashMap<>();
 
     @Override
     public Optional<TravelSession> findById(UUID sessionId) {
@@ -42,6 +48,44 @@ public class InMemoryTravelSessionRepository implements TravelSessionRepository 
     @Override
     public boolean save(TravelSession session, Duration retentionAfterExpiry) {
         return sessions.get(session.sessionId()) == session;
+    }
+
+    @Override
+    public synchronized boolean addIfCapacity(TravelSession session, int maxActive, Instant now,
+                                              Duration retentionAfterExpiry, List<OutboxEntry> entries) {
+        if (!addIfCapacity(session, maxActive, now, retentionAfterExpiry)) {
+            return false;
+        }
+        addOutbox(entries);
+        return true;
+    }
+
+    @Override
+    public synchronized boolean save(TravelSession session, Duration retentionAfterExpiry, List<OutboxEntry> entries) {
+        if (!save(session, retentionAfterExpiry)) {
+            return false;
+        }
+        addOutbox(entries);
+        return true;
+    }
+
+    @Override
+    public void addOutbox(List<OutboxEntry> entries) {
+        entries.forEach(entry -> outbox.put(entry.eventId(), entry));
+    }
+
+    @Override
+    public List<OutboxEntry> pendingOutbox(Instant olderThan, int limit) {
+        return outbox.values().stream()
+                .filter(entry -> entry.createdAt().isBefore(olderThan))
+                .sorted(Comparator.comparing(OutboxEntry::createdAt))
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
+    public void removeOutbox(String eventId) {
+        outbox.remove(eventId);
     }
 
     @Override

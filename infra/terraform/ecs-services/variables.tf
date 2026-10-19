@@ -145,6 +145,36 @@ variable "ai_max_tokens" {
   default     = 500
 }
 
+variable "messaging_enabled" {
+  description = "Event-driven messaging (SNS/SQS from ../messaging). Off until that module is applied and its outputs are set below."
+  type        = bool
+  default     = false
+}
+
+variable "messaging_topic_arn" {
+  description = "travel events topic ARN (output topic_arn of ../messaging). Required when messaging_enabled."
+  type        = string
+  default     = ""
+}
+
+variable "notification_queue_name" {
+  description = "Queue travel-session consumes (output notification_queue_name of ../messaging)."
+  type        = string
+  default     = "roam-notification-events"
+}
+
+variable "recommendation_queue_name" {
+  description = "Queue recommendation consumes (output recommendation_queue_name of ../messaging)."
+  type        = string
+  default     = "roam-recommendation-events"
+}
+
+variable "recommendation_task_role_arn" {
+  description = "Task role for recommendation (output recommendation_task_role_arn of ../messaging). Empty: no task role, as before."
+  type        = string
+  default     = ""
+}
+
 variable "events_provider" {
   description = "Live events in places-discovery: \"none\" (off), \"mock\" (sample events), or \"ticketmaster\" (free; needs a value in the Ticketmaster secret)."
   type        = string

@@ -273,4 +273,55 @@ class DynamoDbTravelSessionRepositoryTest {
             executor.shutdownNow();
         }
     }
+
+    private static com.aitravel.session.messaging.OutboxEntry outboxEntry(String id, java.time.Instant at) {
+        return new com.aitravel.session.messaging.OutboxEntry(id, "TravelSessionStarted", "{\"eventId\":\"" + id + "\"}", at);
+    }
+
+    @Test
+    void writesOutboxEntriesInTheSameTransactionAsTheSession() {
+        TravelSession session = newSession();
+        String eventId = UUID.randomUUID().toString();
+
+        assertThat(taskA.addIfCapacity(session, 100, clock.instant(), RETENTION,
+                List.of(outboxEntry(eventId, clock.instant())))).isTrue();
+
+        assertThat(taskB.pendingOutbox(clock.instant().plusSeconds(1), 50))
+                .extracting(com.aitravel.session.messaging.OutboxEntry::eventId).contains(eventId);
+        taskB.removeOutbox(eventId);
+        assertThat(taskB.pendingOutbox(clock.instant().plusSeconds(1), 50))
+                .extracting(com.aitravel.session.messaging.OutboxEntry::eventId).doesNotContain(eventId);
+        // Outbox items never count as active sessions.
+        assertThat(taskA.addIfCapacity(newSession(), 2, clock.instant(), RETENTION)).isTrue();
+    }
+
+    @Test
+    void aLostRaceWritesNeitherTheChangeNorItsEvent() {
+        TravelSession session = newSession();
+        taskA.addIfCapacity(session, 100, clock.instant(), RETENTION);
+        TravelSession stale = taskB.findById(session.sessionId()).orElseThrow();
+        session.touch(clock.instant());
+        assertThat(taskA.save(session, RETENTION)).isTrue();
+        String eventId = UUID.randomUUID().toString();
+
+        stale.stop();
+        assertThat(taskB.save(stale, RETENTION, List.of(outboxEntry(eventId, clock.instant())))).isFalse();
+
+        assertThat(taskA.pendingOutbox(clock.instant().plusSeconds(1), 50))
+                .extracting(com.aitravel.session.messaging.OutboxEntry::eventId).doesNotContain(eventId);
+        assertThat(taskA.findById(session.sessionId()).orElseThrow().status())
+                .isEqualTo(com.aitravel.session.model.TravelSessionStatus.ACTIVE);
+    }
+
+    @Test
+    void processedEventMarkersAreSharedAcrossTasks() {
+        var storeA = new com.aitravel.session.messaging.DynamoDbProcessedEventStore(client, table, Duration.ofDays(7), clock);
+        var storeB = new com.aitravel.session.messaging.DynamoDbProcessedEventStore(client, table, Duration.ofDays(7), clock);
+        String eventId = UUID.randomUUID().toString();
+
+        assertThat(storeA.markProcessed("notification", eventId)).isTrue();
+        assertThat(storeB.markProcessed("notification", eventId)).isFalse();
+        storeB.release("notification", eventId);
+        assertThat(storeA.markProcessed("notification", eventId)).isTrue();
+    }
 }

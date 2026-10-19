@@ -1,8 +1,10 @@
 package com.aitravel.session.repository;
 
+import com.aitravel.session.messaging.OutboxEntry;
 import com.aitravel.session.model.TravelSession;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,11 +23,28 @@ public interface TravelSessionRepository {
      */
     boolean addIfCapacity(TravelSession session, int maxActive, Instant now, Duration retentionAfterExpiry);
 
+    /** {@link #addIfCapacity}, also writing {@code outbox} entries atomically with the new session. */
+    default boolean addIfCapacity(TravelSession session, int maxActive, Instant now, Duration retentionAfterExpiry,
+                                  List<OutboxEntry> outbox) {
+        if (!outbox.isEmpty()) {
+            throw new UnsupportedOperationException("This store does not support an outbox");
+        }
+        return addIfCapacity(session, maxActive, now, retentionAfterExpiry);
+    }
+
     /**
      * Persists the session if its stored version still equals {@link TravelSession#version()}, then advances the
      * version. Returns false, writing nothing, when another writer saved first or the session no longer exists.
      */
     boolean save(TravelSession session, Duration retentionAfterExpiry);
+
+    /** {@link #save}, also writing {@code outbox} entries atomically with the change: both or neither. */
+    default boolean save(TravelSession session, Duration retentionAfterExpiry, List<OutboxEntry> outbox) {
+        if (!outbox.isEmpty()) {
+            throw new UnsupportedOperationException("This store does not support an outbox");
+        }
+        return save(session, retentionAfterExpiry);
+    }
 
     /**
      * Takes the per-session refresh lease so only one refresh runs at a time, across every task. The lease ends

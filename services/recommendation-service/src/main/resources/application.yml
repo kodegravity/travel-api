@@ -1,4 +1,9 @@
 spring:
+  cloud:
+    aws:
+      # The SQS client exists only with messaging on; credentials and region come from the default chain.
+      sqs:
+        enabled: ${TRAVEL_MESSAGING_ENABLED:false}
   application:
     name: recommendation-service
   lifecycle:
@@ -43,6 +48,10 @@ recommendation:
   max-recommendations: ${RECOMMENDATION_MAX_RESULTS:20}
 
 travel:
+  messaging:
+    # Consume TravelSessionStarted from SQS to warm up the AI paths. Off by default.
+    enabled: ${TRAVEL_MESSAGING_ENABLED:false}
+    session-queue: ${TRAVEL_MESSAGING_SESSION_QUEUE:roam-recommendation-events}
   warmup:
     # Background warm-up after startup (Okta keys, first downstream connection).
     enabled: ${TRAVEL_WARMUP_ENABLED:true}
