@@ -33,6 +33,10 @@ ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="places-discovery-service" \
       org.opencontainers.image.revision="${VCS_REF}"
 
+# Security fixes newer than the pinned base image. Drop each one once the base digest includes it.
+# libexpat: CVE-2026-77214 (fixed in 2.9.0-r0).
+RUN apk upgrade --no-cache libexpat
+
 # Fixed numeric UID/GID so the non-root user can be verified by ECS and orchestrators.
 RUN addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app
