@@ -58,6 +58,7 @@ class CorsIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED))
                 .andExpect(header().string("Access-Control-Allow-Methods", containsStringIgnoringCase("POST")))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsStringIgnoringCase("PUT")))
                 .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("content-type")));
     }
 

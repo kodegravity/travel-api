@@ -1,5 +1,6 @@
 package com.aitravel.session.exception;
 
+import com.aitravel.session.plan.TravelPlanException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -88,6 +89,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleTravelSession(TravelSessionException ex) {
         TravelSessionException.Reason reason = ex.reason();
         log.info("Travel session request rejected reason={} status={}", reason, reason.status().value());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(reason.status(), reason.detail());
+        problem.setTitle(reason.title());
+        return ResponseEntity.status(reason.status()).body(problem);
+    }
+
+    @ExceptionHandler(TravelPlanException.class)
+    public ResponseEntity<ProblemDetail> handleTravelPlan(TravelPlanException ex) {
+        TravelPlanException.Reason reason = ex.reason();
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(reason.status(), reason.detail());
         problem.setTitle(reason.title());
         return ResponseEntity.status(reason.status()).body(problem);

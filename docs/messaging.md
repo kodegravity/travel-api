@@ -32,7 +32,7 @@ is waiting on.
 | `RecommendationsReady` | A refresh records new places | travel-session (notifications) | Logs and counts "would notify". There is no push channel yet; Web Push plugs in here. |
 | `NearbyEventDiscovered` | A refresh finds new live events | travel-session (notifications) | Same as above. |
 | `TravelSessionEnded` | A session is stopped, or first seen as expired | travel-session (notifications) | Logs and counts. |
-| `ItineraryUpdated` | **Not produced yet**: itineraries are stored in the browser | — | Contract only, ready for itinerary sync. |
+| `ItineraryUpdated` | A travel plan save changes a city's itinerary (`PUT /api/v1/travel-plan`) | — | No consumer yet. Published after the save, not in the same transaction. |
 
 ## Event contract
 

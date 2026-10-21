@@ -3,6 +3,8 @@ package com.aitravel.session.config;
 import com.aitravel.session.messaging.DynamoDbProcessedEventStore;
 import com.aitravel.session.messaging.MessagingProperties;
 import com.aitravel.session.messaging.ProcessedEventStore;
+import com.aitravel.session.plan.DynamoDbTravelPlanStore;
+import com.aitravel.session.plan.TravelPlanStore;
 import com.aitravel.session.repository.DynamoDbTravelSessionRepository;
 import com.aitravel.session.repository.TravelSessionRepository;
 import java.net.URI;
@@ -47,6 +49,12 @@ public class DynamoDbSessionStoreConfig {
     TravelSessionRepository dynamoDbTravelSessionRepository(DynamoDbClient travelSessionDynamoDbClient,
                                                             DynamoDbSessionProperties properties, Clock clock) {
         return new DynamoDbTravelSessionRepository(travelSessionDynamoDbClient, properties.tableName(), clock);
+    }
+
+    @Bean
+    TravelPlanStore dynamoDbTravelPlanStore(DynamoDbClient travelSessionDynamoDbClient,
+                                            DynamoDbSessionProperties properties, Clock clock) {
+        return new DynamoDbTravelPlanStore(travelSessionDynamoDbClient, properties.tableName(), clock);
     }
 
     /** Duplicate detection for SQS consumers, shared by every task, in the same table. */

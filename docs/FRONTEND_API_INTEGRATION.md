@@ -10,7 +10,7 @@ This document describes the Spring Boot backend contract for the separately main
 | Production | Set by deployment | Set with `CORS_ALLOWED_ORIGINS` |
 
 - CORS applies only to `/api/v1/**`. Actuator endpoints are not cross-origin accessible.
-- Allowed methods: `GET`, `POST`, `DELETE`, `OPTIONS`. Allowed request headers: `Content-Type`, `Accept`.
+- Allowed methods: `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`. Allowed request headers: `Content-Type`, `Accept`.
 - Credentials are not allowed (`Access-Control-Allow-Credentials` is absent). The frontend must not send cookies.
 - Preflight responses are cached for 30 minutes (`Access-Control-Max-Age: 1800`).
 - A request from an origin that is not in the list receives no `Access-Control-Allow-Origin` header. A preflight from such an origin returns `403`.
@@ -30,6 +30,8 @@ export CORS_ALLOWED_ORIGINS=http://localhost:5173,https://travel.example.com
 | POST | `/api/v1/travel-sessions` | Create an active travel session. | `201` |
 | POST | `/api/v1/travel-sessions/{sessionId}/recommendations` | Submit a location and refresh recommendations. | `200` |
 | DELETE | `/api/v1/travel-sessions/{sessionId}` | Stop the session and clear its data. | `204` |
+| GET | `/api/v1/travel-plan` | The signed-in traveler's synced plan (`version` 0 when empty). | `200` |
+| PUT | `/api/v1/travel-plan` | Replace the plan if it is still at `baseVersion`. `409` if another device saved first, `413` over 350 KB. | `200` |
 
 All request and response bodies are JSON (`Content-Type: application/json`).
 
@@ -141,6 +143,26 @@ Example RecommendationDto:
   "mapsUrl": "https://www.google.com/maps/dir/?api=1&origin=41.9028,12.4964&destination=41.8986,12.4769&travelmode=walking"
 }
 ```
+
+## Travel plan
+
+The plan holds the traveler's trips, favorites, and itineraries so they follow them across devices. The backend stores it as given; the web app owns the shape of each entry's `data` and does the merging.
+
+```json
+{
+  "ownerRef": "64 hex characters: SHA-256 of the Okta subject",
+  "version": 3,
+  "entries": {
+    "city:madrid": { "updatedAt": "2026-10-20T10:00:00Z", "data": { "trip": [], "settings": null, "itinerary": {} } },
+    "favorites":   { "updatedAt": "2026-10-20T09:00:00Z", "data": [] },
+    "city:rome":   { "updatedAt": "2026-10-20T11:00:00Z", "data": null }
+  }
+}
+```
+
+- Keys are `favorites` or `city:<cityId>` (`[A-Za-z0-9_-]{1,64}`), at most 200 entries.
+- `data: null` records a deletion, so it can win a merge on another device.
+- `PUT` takes `{ "baseVersion": <version you merged from>, "entries": { ... } }` and returns the saved plan with the new version.
 
 ## Error format
 

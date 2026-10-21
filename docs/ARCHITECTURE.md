@@ -48,6 +48,7 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
   - `POST /api/v1/routes/optimize`
   - `POST /api/v1/recommendations`, stateless search (no session)
   - `POST /api/v1/chat`, "Ask ROAM" chat
+  - `GET` / `PUT /api/v1/travel-plan`, the traveler's synced trips, favorites, and itineraries (`plan/`)
 - **Key classes:**
   - `controller/` (REST), `service/TravelSessionService`
   - `client/RemoteRecommendationService`, `client/RouteClient`, `client/PlaceDetailsClient`
@@ -97,9 +98,10 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
 - **Sign-in and registration:** Okta's hosted page (`LoginPage.tsx`). Credentials never reach the app. The callback is `/login/callback`.
 - **Routes** (`src/App.tsx`): `/` home, `/explore/:cityId`, `/places/:cityId/:placeId`, `/trip/:cityId`, `/trip/:cityId/route`, `/trip/:cityId/itinerary`, `/itinerary`, `/travel-mode`, `/assistant` (Ask ROAM chat). `/explore` and `/trip` redirect; unknown paths redirect to `/`.
 - **Backend calls** (`src/services/travelApi.ts`): `/api/v1/recommendations`, `/api/v1/travel-sessions` (start, refresh, stop), `/api/v1/places`, `/api/v1/routes/optimize`, `/api/v1/chat`.
-- **Active Travel Mode** (`hooks/useTravelSession.ts`): watches location while the tab is visible, refreshes after 25 m of movement (at most every 30 s) and every 5 minutes. New places show as an in-app alert, pinned to the bottom on phones.
+- **Active Travel Mode** (`hooks/useTravelSession.ts`): watches location while the tab is visible and follows the backend's refresh rule: it only asks again after moving 250 m and 5 minutes since the last real check. A standing traveler checks in every 15 minutes so the session doesn't time out. New places show as an in-app alert, pinned to the bottom on phones.
 - **Notifications** (`services/notifications.ts`, `public/sw.js`): once the traveler allows them, new places and live events raise a system notification while the tab is in the background. They go through the service worker, which Android Chrome requires. Monitoring continues in the background only while notifications are allowed. This is not Web Push: the page must stay open. On iOS it works only from a Home Screen app.
-- **Itineraries:** built and replanned in the browser (`services/itinerary.ts`), with detour suggestions along each leg. Stored in the browser only.
+- **Itineraries:** built and replanned in the browser (`services/itinerary.ts`), with detour suggestions along each leg.
+- **Plan sync** (`services/planSync.ts`, mounted by `components/layout/PlanSync.tsx`): while signed in, trips, favorites, and itineraries sync with `/api/v1/travel-plan`. Browser storage stays the working copy and works offline. The plan is split into parts (each city, plus favorites). For each part the side changed last wins, and deletions sync too. A save names the version it merged from; on `409` the app reloads, merges, and retries. Sync runs on sign-in, 2 seconds after a change, when the tab becomes visible, and when the browser comes back online. If a different account signs in on the same browser, its plan replaces the local one and nothing is uploaded.
 - **Maps:** Google Maps JS SDK with `VITE_GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_MAP_ID`, used by `components/explorer/PlacesMap.tsx`.
 - **Client code:** `src/services/` (API clients, geolocation, route planning), `src/hooks/`, `src/components/`.
 - **Testing:** Vitest unit tests. Playwright specs in `e2e/` (`intercepted` and `live`).
@@ -107,9 +109,9 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
 
 ## Data
 
-- **Travel sessions:** DynamoDB table `roam-travel-sessions` (hash key `sessionId`, on-demand billing) in `infra/terraform/session-store`, accessed through `DynamoDbTravelSessionRepository`. The same table holds the messaging outbox (`outbox#`) and processed-message (`processed#`) items.
+- **Travel sessions:** DynamoDB table `roam-travel-sessions` (hash key `sessionId`, on-demand billing) in `infra/terraform/session-store`, accessed through `DynamoDbTravelSessionRepository`. The same table holds the messaging outbox (`outbox#`), processed-message (`processed#`), and travel plan (`plan#<SHA-256 of the Okta subject>`) items. A plan is one versioned item per traveler, at most 350 KB, deleted by TTL a year after its last save.
 - **Secrets:** AWS Secrets Manager holds the OpenAI, Google Places, Ticketmaster, and Google Maps browser keys. The ECS task definitions (`infra/terraform/ecs-services`) read them through `secrets`. The Ticketmaster secret is JSON and is read by its `ticketmaster-api-key` field.
-- **Itineraries:** browser only. `ItineraryUpdated` exists as an event contract but is not produced yet.
+- **Trips and itineraries:** browser storage on each device, synced to the traveler's plan item. Saving a plan publishes `ItineraryUpdated` for each city whose itinerary changed.
 
 ## AWS deployment
 
@@ -117,7 +119,7 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
 |---|---|---|
 | ECS Fargate cluster `ai-travel-app` | `infra/terraform/ecs-services` | Three services (0.25 vCPU, 512 MB each), Service Connect namespace, secrets wired in |
 | API Gateway (HTTP API) + VPC Link | `infra/terraform/api-gateway` | `roam-ai-api`. Okta JWT authorizer, `HTTP_PROXY` to travel-session through Cloud Map. The only public entry point (the ALB was removed). |
-| DynamoDB | `infra/terraform/session-store` | `roam-travel-sessions`: sessions and the messaging outbox |
+| DynamoDB | `infra/terraform/session-store` | `roam-travel-sessions`: sessions, the messaging outbox, and travel plans |
 | SNS + SQS | `infra/terraform/messaging` | Topic `roam-travel-events`, queues `roam-recommendation-events` and `roam-notification-events` with DLQs, CloudWatch alarms emailed through an alerts topic |
 | S3 + CloudFront | `infra/terraform/frontend` | Frontend hosting |
 | Secrets Manager | `infra/terraform/secrets` | API keys |
