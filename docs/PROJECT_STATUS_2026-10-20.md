@@ -59,7 +59,7 @@ From the Terraform configuration and state (`infra/terraform/*`, local state).
 | City explore, place details and photos | `/explore/:cityId`, `/places/:cityId/:placeId` | Done |
 | Trip builder, route optimization | `/trip/:cityId`, `/trip/:cityId/route` | Done |
 | Itineraries with replanning and detour suggestions | `/trip/:cityId/itinerary`, `/itinerary` | Done |
-| Trip and itinerary sync across devices | `/api/v1/travel-plan`, `services/planSync.ts` | Built 2026-10-20; not deployed yet |
+| Trip and itinerary sync across devices | `/api/v1/travel-plan`, `services/planSync.ts` | Live 2026-10-20 (travel-session:16, travel-ui d957cea) |
 | Active Travel Mode (location watch, auto refresh, dedupe) | `/travel-mode`, `useTravelSession.ts` | Done |
 | New-place alerts | In-app alert, plus a system notification while the tab is in the background | Done (2026-10-20). Needs the page open. |
 | Live event alerts (Ticketmaster, AI-written) | Travel Mode | Done |
@@ -95,7 +95,6 @@ One unhandled error appears in the Vitest run. It comes from an uncommitted loca
 | 5 | Daily caps are per task and reset on restart | Provider-side quotas are the real hard limit | P2 |
 | 6 | Docker Compose for the local stack | No one-command local run | P2 |
 | 7 | Feedback controls (UI and API) | Not started | P2 |
-| 8 | Deploy trip and itinerary sync | Built and tested 2026-10-20; backend must deploy before the web app | P2 |
 | 9 | ECR role ARN with the account ID is hard-coded in `backend-ci.yml` | Should be a repository variable, like `TF_AWS_ROLE_ARN` | P3 |
 | 10 | README is out of date | It lists only the first endpoints, not chat, events, routes, or messaging | P3 |
 | 11 | Datadog follow-ups (from 2026-10-18, not rechecked) | Rotate the API keys that were shared; logs show `service: ecs` instead of each service name | P3 |
