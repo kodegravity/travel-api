@@ -11,6 +11,6 @@ import org.springframework.validation.annotation.Validated;
 public record RecommendationServiceProperties(
         @DefaultValue("http://localhost:8081") String baseUrl,
         @DefaultValue("2s") Duration connectTimeout,
-        @DefaultValue("10s") Duration readTimeout
+        @DefaultValue("20s") Duration readTimeout
 ) {
 }

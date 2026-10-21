@@ -22,7 +22,9 @@ server:
 recommendation-service:
   base-url: ${RECOMMENDATION_SERVICE_BASE_URL:http://localhost:8081}
   connect-timeout: 2s
-  read-timeout: 10s
+  # Must outlast the slowest recommendation: places search (8s read timeout) plus the AI timeout (10s live), so the
+  # ranked fallback still reaches the traveler. Stays under API Gateway's 29s integration timeout.
+  read-timeout: ${RECOMMENDATION_SERVICE_READ_TIMEOUT:20s}
 
 travel:
   messaging:
