@@ -78,7 +78,8 @@ From the Terraform configuration and state (`infra/terraform/*`, local state).
 | travel-session-service | 153 run, 0 failed, 14 skipped (DynamoDB and LocalStack tests run only with `DYNAMODB_TEST_ENDPOINT` / `LOCALSTACK_ENDPOINT` set) |
 | Frontend Vitest | 248 run, 0 failed |
 | Frontend typecheck and lint | Pass |
-| Playwright (`e2e/intercepted`, `e2e/live`) | Not run |
+| Playwright intercepted (desktop + mobile) | 42 passed; runs before every web deploy (travel-ui 89f5cea) |
+| Playwright live smoke (`npm run test:e2e:live`) | Not run yet; needs a manual Okta sign-in |
 
 One unhandled error appears in the Vitest run. It comes from an uncommitted local change in `TravelExplorerPage.tsx` that calls `scrollIntoView(...)`, which jsdom lacks. `scrollIntoView?.(...)` fixes it.
 
@@ -90,7 +91,7 @@ One unhandled error appears in the Vitest run. It comes from an uncommitted loca
 |---|---|---|---|
 | 1 | Move Terraform state to a remote backend (S3) | State exists on one laptop only. `terraform.yml` needs `backend.hcl` and `TF_AWS_ROLE_ARN` before CI can plan or apply. | P1 |
 | 2 | Set `readonlyRootFilesystem` on the ECS tasks | Container hardening; not set on any task | P1 |
-| 3 | End-to-end verification | Playwright has not run against the live stack. Location and notifications were tested by hand on a phone only. | P1 |
+| 3 | Live smoke run | Intercepted e2e now gates deploys; run `npm run test:e2e:live` once against the deployed site | P2 |
 | 4 | Web Push for notifications | Today's alerts need the page open, and phones may pause background tabs. The SQS notification consumer is the hook for it. | P2 |
 | 5 | Daily caps are per task and reset on restart | Provider-side quotas are the real hard limit | P2 |
 | 6 | Docker Compose for the local stack | No one-command local run | P2 |
@@ -104,6 +105,6 @@ One unhandled error appears in the Vitest run. It comes from an uncommitted loca
 ## 7. Next steps
 
 1. Remote Terraform state, so infrastructure isn't tied to one machine and CI can plan.
-2. Run the Playwright intercepted suite in `deploy.yml`, and run the live suite by hand once against the deployed stack.
+2. Run the live smoke suite once against the deployed site (the intercepted suite already gates deploys).
 3. Set `readonlyRootFilesystem`, with a writable `/tmp` volume if a service needs one.
 4. Decide whether Web Push is worth building now (it means VAPID keys, a subscription store, and a sender behind the notification queue).
