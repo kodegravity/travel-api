@@ -4,6 +4,9 @@ spring:
       # The SQS listener client exists only with messaging on; credentials and region come from the default chain.
       sqs:
         enabled: ${TRAVEL_MESSAGING_ENABLED:false}
+      # PostgresConfig reads the database secret with its own client; no Spring Cloud AWS Secrets Manager client.
+      secretsmanager:
+        enabled: false
   application:
     name: travel-session-service
   lifecycle:
