@@ -37,6 +37,17 @@ travel:
     relay-interval-ms: ${TRAVEL_MESSAGING_RELAY_INTERVAL_MS:30000}
     # Endpoint override for LocalStack only; blank uses the regional SNS endpoint.
     sns-endpoint: ${TRAVEL_MESSAGING_SNS_ENDPOINT:}
+  postgres:
+    # Traveler profiles in PostgreSQL. Off by default: profiles are kept in memory and lost on restart.
+    enabled: ${TRAVEL_POSTGRES_ENABLED:false}
+    url: ${TRAVEL_POSTGRES_URL:jdbc:postgresql://localhost:5432/roam}
+    # Local development. On AWS leave both blank and set the secret ID instead.
+    username: ${TRAVEL_POSTGRES_USERNAME:}
+    password: ${TRAVEL_POSTGRES_PASSWORD:}
+    # The RDS-managed master user secret (JSON with username and password). Read when a connection is opened and
+    # read again after a rejected password, so a rotation needs no restart.
+    secret-id: ${TRAVEL_POSTGRES_SECRET_ID:}
+    max-pool-size: ${TRAVEL_POSTGRES_MAX_POOL_SIZE:5}
   warmup:
     # Background warm-up after startup (Okta keys, first downstream connection).
     enabled: ${TRAVEL_WARMUP_ENABLED:true}

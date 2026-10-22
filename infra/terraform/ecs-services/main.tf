@@ -188,6 +188,9 @@ resource "aws_ecs_task_definition" "travel_session" {
         { name = "TRAVEL_MESSAGING_NOTIFICATION_QUEUE", value = var.notification_queue_name },
         { name = "TRAVEL_SESSION_STORE", value = "dynamodb" },
         { name = "TRAVEL_SESSION_TABLE", value = var.session_table_name },
+        { name = "TRAVEL_POSTGRES_ENABLED", value = tostring(var.postgres_enabled) },
+        { name = "TRAVEL_POSTGRES_URL", value = var.postgres_url },
+        { name = "TRAVEL_POSTGRES_SECRET_ID", value = var.postgres_secret_arn },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)

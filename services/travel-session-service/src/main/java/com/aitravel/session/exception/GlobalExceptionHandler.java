@@ -1,6 +1,7 @@
 package com.aitravel.session.exception;
 
 import com.aitravel.session.plan.TravelPlanException;
+import com.aitravel.session.profile.ProfileUnavailableException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -100,6 +101,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(reason.status(), reason.detail());
         problem.setTitle(reason.title());
         return ResponseEntity.status(reason.status()).body(problem);
+    }
+
+    @ExceptionHandler(ProfileUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleProfileUnavailable(ProfileUnavailableException ex) {
+        log.warn("Profile store unavailable cause={}", ex.getCause() == null ? "none" : ex.getCause().getClass().getSimpleName());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE, "Your profile is temporarily unavailable. Please try again later.");
+        problem.setTitle("Profile unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
     }
 
     // Only the parameter name is echoed, never the submitted value.

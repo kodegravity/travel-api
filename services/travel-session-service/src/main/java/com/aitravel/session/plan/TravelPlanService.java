@@ -117,8 +117,11 @@ public class TravelPlanService {
         return mapper.readValue(plan.entriesJson(), ENTRIES);
     }
 
-    /** Full SHA-256 of the Okta subject: the storage key, and the ownerRef the web app compares. */
-    static String ownerKey(String subject) {
+    /**
+     * Full SHA-256 of the Okta subject: the storage key, and the ownerRef the web app compares. Traveler profiles use
+     * the same key.
+     */
+    public static String ownerKey(String subject) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(subject.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);

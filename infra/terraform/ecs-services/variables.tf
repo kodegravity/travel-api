@@ -251,3 +251,21 @@ variable "redis_port" {
   type        = number
   default     = 6379
 }
+
+variable "postgres_enabled" {
+  description = "Keep traveler profiles in PostgreSQL (infra/terraform/database) instead of task memory."
+  type        = bool
+  default     = false
+}
+
+variable "postgres_url" {
+  description = "JDBC URL (database module output jdbc_url). Used when postgres_enabled."
+  type        = string
+  default     = ""
+}
+
+variable "postgres_secret_arn" {
+  description = "RDS-managed master user secret (database module output secret_arn). The task reads it at connect time."
+  type        = string
+  default     = ""
+}

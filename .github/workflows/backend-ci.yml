@@ -23,12 +23,25 @@ jobs:
     name: Build and test (${{ matrix.service }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # DynamoDB Local for the travel-session store tests. Other services ignore it.
+    # DynamoDB Local and PostgreSQL for the travel-session store tests. Other services ignore them.
     services:
       dynamodb:
         image: amazon/dynamodb-local:2.6.1
         ports:
           - 8000:8000
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: roam
+          POSTGRES_PASSWORD: roam-ci
+          POSTGRES_DB: roam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U roam"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     strategy:
       fail-fast: true
       matrix:
@@ -64,6 +77,9 @@ jobs:
         working-directory: services/${{ matrix.service }}
         env:
           DYNAMODB_TEST_ENDPOINT: http://localhost:8000
+          POSTGRES_TEST_URL: jdbc:postgresql://localhost:5432/roam
+          POSTGRES_TEST_USER: roam
+          POSTGRES_TEST_PASSWORD: roam-ci
         run: ./mvnw -B -ntp clean verify
 
       - name: Summarize test results

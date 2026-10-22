@@ -49,6 +49,7 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
   - `POST /api/v1/recommendations`, stateless search (no session)
   - `POST /api/v1/chat`, "Ask ROAM" chat
   - `GET` / `PUT /api/v1/travel-plan`, the traveler's synced trips, favorites, and itineraries (`plan/`)
+  - `GET` / `PUT /api/v1/profile`, the traveler's profile and preferences: display name, home city, default interests, currency, and travel mode (`profile/`). The first `GET` registers the traveler.
 - **Key classes:**
   - `controller/` (REST), `service/TravelSessionService`
   - `client/RemoteRecommendationService`, `client/RouteClient`, `client/PlaceDetailsClient`
@@ -111,6 +112,7 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
 ## Data
 
 - **Travel sessions:** DynamoDB table `roam-travel-sessions` (hash key `sessionId`, on-demand billing) in `infra/terraform/session-store`, accessed through `DynamoDbTravelSessionRepository`. The same table holds the messaging outbox (`outbox#`), processed-message (`processed#`), and travel plan (`plan#<SHA-256 of the Okta subject>`) items. A plan is one versioned item per traveler, at most 350 KB, deleted by TTL a year after its last save.
+- **Traveler profiles:** PostgreSQL table `traveler_profile`, one row per traveler keyed by the same SHA-256 owner key as the travel plan. It never holds a password, an email address, or the raw Okta subject: Okta stays the only identity system. Flyway migrations (`db/migration`) run after startup and again on the next profile call if the database was down, so an outage only makes `/api/v1/profile` answer `503`. The app reads the RDS-managed secret when it opens a connection and reads it again if the password was rotated.
 - **Secrets:** AWS Secrets Manager holds the OpenAI, Google Places, Ticketmaster, and Google Maps browser keys. The ECS task definitions (`infra/terraform/ecs-services`) read them through `secrets`. The Ticketmaster secret is JSON and is read by its `ticketmaster-api-key` field.
 - **Trips and itineraries:** browser storage on each device, synced to the traveler's plan item. Saving a plan publishes `ItineraryUpdated` for each city whose itinerary changed.
 
@@ -121,6 +123,7 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
 | ECS Fargate cluster `ai-travel-app` | `infra/terraform/ecs-services` | Three services (0.25 vCPU, 512 MB each), Service Connect namespace, secrets wired in |
 | API Gateway (HTTP API) + VPC Link | `infra/terraform/api-gateway` | `roam-ai-api`. Okta JWT authorizer, `HTTP_PROXY` to travel-session through Cloud Map. The only public entry point (the ALB was removed). |
 | DynamoDB | `infra/terraform/session-store` | `roam-travel-sessions`: sessions, the messaging outbox, and travel plans |
+| RDS PostgreSQL 17 (db.t4g.micro, single-AZ) | `infra/terraform/database` | `roam-db`: traveler profiles. Encrypted, 7-day backups, deletion protection, reachable only from travel-session. The password is RDS-managed in Secrets Manager and rotates weekly. |
 | SNS + SQS | `infra/terraform/messaging` | Topic `roam-travel-events`, queues `roam-recommendation-events` and `roam-notification-events` with DLQs, CloudWatch alarms emailed through an alerts topic |
 | S3 + CloudFront | `infra/terraform/frontend` | Frontend hosting |
 | Secrets Manager | `infra/terraform/secrets` | API keys |
@@ -154,6 +157,7 @@ Terraform state is local (gitignored), and applies are run by hand from each mod
 | AI timeout | recommendation | `TRAVEL_AI_TIMEOUT` | live ECS: `10s` |
 | Messaging | travel-session, recommendation | `TRAVEL_MESSAGING_ENABLED` | `false` (live ECS: `true`) |
 | Redis (shared caps and caches) | places-discovery, recommendation | `TRAVEL_REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_SSL` | off |
+| PostgreSQL (traveler profiles) | travel-session | `TRAVEL_POSTGRES_ENABLED`, `TRAVEL_POSTGRES_URL`, `TRAVEL_POSTGRES_SECRET_ID` (or `TRAVEL_POSTGRES_USERNAME` / `TRAVEL_POSTGRES_PASSWORD` locally) | off (profiles in memory) |
 | Google Places key | places-discovery | from Secrets Manager | required for Google mode |
 | OpenAI key | recommendation | from Secrets Manager | required when AI is enabled |
 | Ticketmaster key | places-discovery | from Secrets Manager | required for Ticketmaster events |
