@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -44,6 +45,12 @@ public class GooglePlacesAttractionProvider implements AttractionProvider {
     private final DailyCallLimiter dailyCallLimiter;
 
     public GooglePlacesAttractionProvider(RestClient googlePlacesRestClient, GooglePlacesProperties properties) {
+        this(googlePlacesRestClient, properties, SharedStore.NONE);
+    }
+
+    @Autowired
+    public GooglePlacesAttractionProvider(RestClient googlePlacesRestClient, GooglePlacesProperties properties,
+                                          SharedStore shared) {
         if (properties.apiKey() == null || properties.apiKey().isBlank()) {
             throw new IllegalStateException(
                     "GOOGLE_PLACES_API_KEY must be set when attraction.provider=google "
@@ -51,7 +58,8 @@ public class GooglePlacesAttractionProvider implements AttractionProvider {
         }
         this.restClient = googlePlacesRestClient;
         this.properties = properties;
-        this.dailyCallLimiter = new DailyCallLimiter("google-places", properties.maxCallsPerDay(), Clock.systemUTC());
+        this.dailyCallLimiter = new DailyCallLimiter("google-places", properties.maxCallsPerDay(), Clock.systemUTC(),
+                shared);
     }
 
     @Override

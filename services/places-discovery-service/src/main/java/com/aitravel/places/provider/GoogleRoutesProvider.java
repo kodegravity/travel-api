@@ -48,15 +48,20 @@ public class GoogleRoutesProvider implements RouteProvider {
 
     @Autowired
     public GoogleRoutesProvider(@Qualifier("googleRoutesRestClient") RestClient restClient,
-                                GooglePlacesProperties places, GoogleRoutesProperties routes) {
-        this(restClient, places, routes, Clock.systemUTC());
+                                GooglePlacesProperties places, GoogleRoutesProperties routes, SharedStore shared) {
+        this(restClient, places, routes, Clock.systemUTC(), shared);
     }
 
     GoogleRoutesProvider(RestClient restClient, GooglePlacesProperties places, GoogleRoutesProperties routes,
                          Clock clock) {
+        this(restClient, places, routes, clock, SharedStore.NONE);
+    }
+
+    GoogleRoutesProvider(RestClient restClient, GooglePlacesProperties places, GoogleRoutesProperties routes,
+                         Clock clock, SharedStore shared) {
         this.restClient = restClient;
         this.places = places;
-        this.dailyCallLimiter = new DailyCallLimiter("google-routes", routes.maxCallsPerDay(), clock);
+        this.dailyCallLimiter = new DailyCallLimiter("google-routes", routes.maxCallsPerDay(), clock, shared);
     }
 
     @Override

@@ -90,7 +90,8 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
   - `GooglePlaceDetailsProvider` or `MockPlaceDetailsProvider`
   - `GoogleRoutesProvider` or `EstimatedRouteProvider`
   - `TicketmasterEventProvider`, `SampleEventProvider`, or `NoEventProvider`
-- **Daily caps:** every paid call has a per-task daily cap (`GOOGLE_PLACES_MAX_CALLS_PER_DAY` and similar). Counters reset on restart.
+- **Daily caps:** every paid call has a daily cap (`GOOGLE_PLACES_MAX_CALLS_PER_DAY` and similar). With Redis on (`TRAVEL_REDIS_ENABLED`), each cap is one counter shared by all tasks that survives restarts. Without Redis, or while it is unreachable, each task counts on its own.
+- **No-photo memory:** a place Google has no photo for is remembered in Redis for 7 days (only its place ID), so its cards skip the paid Place Details lookup.
 
 ## Frontend (`travel-ui`)
 
@@ -123,6 +124,7 @@ Service-to-service calls use `RestClient` over ECS Service Connect. Each call fo
 | SNS + SQS | `infra/terraform/messaging` | Topic `roam-travel-events`, queues `roam-recommendation-events` and `roam-notification-events` with DLQs, CloudWatch alarms emailed through an alerts topic |
 | S3 + CloudFront | `infra/terraform/frontend` | Frontend hosting |
 | Secrets Manager | `infra/terraform/secrets` | API keys |
+| ElastiCache Serverless (Valkey 8) | `infra/terraform/cache` | `roam-cache`: shared daily caps, weather, and no-photo memory. TLS, reachable only from places-discovery and recommendation. Storage and throughput capped. |
 | ECR | `backend-ci.yml` | Images per service, pushed on master and development |
 | Logs | CloudWatch `/ecs/ai-travel-companion-<service>` | Forwarded to Datadog by the Datadog Forwarder Lambda (set up outside Terraform) |
 
@@ -151,6 +153,7 @@ Terraform state is local (gitignored), and applies are run by hand from each mod
 | AI selection | recommendation | `TRAVEL_AI_ENABLED` | `false` (live ECS: `true`) |
 | AI timeout | recommendation | `TRAVEL_AI_TIMEOUT` | live ECS: `10s` |
 | Messaging | travel-session, recommendation | `TRAVEL_MESSAGING_ENABLED` | `false` (live ECS: `true`) |
+| Redis (shared caps and caches) | places-discovery, recommendation | `TRAVEL_REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_SSL` | off |
 | Google Places key | places-discovery | from Secrets Manager | required for Google mode |
 | OpenAI key | recommendation | from Secrets Manager | required when AI is enabled |
 | Ticketmaster key | places-discovery | from Secrets Manager | required for Ticketmaster events |

@@ -4,6 +4,7 @@ import com.aitravel.recommendation.config.TravelAiProperties;
 import com.aitravel.recommendation.exception.AiRecommendationException;
 import com.aitravel.recommendation.model.Interest;
 import com.aitravel.recommendation.service.DailyCallLimiter;
+import com.aitravel.recommendation.service.SharedStore;
 import com.aitravel.recommendation.service.SpringAIRecommendationService;
 import jakarta.annotation.PreDestroy;
 import java.time.Clock;
@@ -73,15 +74,21 @@ public class OpenAiLiveEventWriter implements LiveEventWriter {
     });
 
     @Autowired
-    public OpenAiLiveEventWriter(ChatClient chatClient, TravelAiProperties aiProperties, LiveSuggestionProperties properties) {
-        this(chatClient, aiProperties, properties, Clock.systemUTC());
+    public OpenAiLiveEventWriter(ChatClient chatClient, TravelAiProperties aiProperties, LiveSuggestionProperties properties,
+                                 SharedStore shared) {
+        this(chatClient, aiProperties, properties, Clock.systemUTC(), shared);
     }
 
     OpenAiLiveEventWriter(ChatClient chatClient, TravelAiProperties aiProperties, LiveSuggestionProperties properties,
                           Clock clock) {
+        this(chatClient, aiProperties, properties, clock, SharedStore.NONE);
+    }
+
+    OpenAiLiveEventWriter(ChatClient chatClient, TravelAiProperties aiProperties, LiveSuggestionProperties properties,
+                          Clock clock, SharedStore shared) {
         this.chatClient = chatClient;
         this.aiProperties = aiProperties;
-        this.dailyCallLimiter = new DailyCallLimiter("openai-live", properties.aiMaxCallsPerDay(), clock);
+        this.dailyCallLimiter = new DailyCallLimiter("openai-live", properties.aiMaxCallsPerDay(), clock, shared);
         this.clock = clock;
     }
 

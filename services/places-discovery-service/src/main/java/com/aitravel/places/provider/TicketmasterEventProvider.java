@@ -48,14 +48,18 @@ public class TicketmasterEventProvider implements EventProvider {
 
     @Autowired
     public TicketmasterEventProvider(@Qualifier("ticketmasterRestClient") RestClient restClient,
-                                     EventsProperties properties) {
-        this(restClient, properties, Clock.systemUTC());
+                                     EventsProperties properties, SharedStore shared) {
+        this(restClient, properties, Clock.systemUTC(), shared);
     }
 
     TicketmasterEventProvider(RestClient restClient, EventsProperties properties, Clock clock) {
+        this(restClient, properties, clock, SharedStore.NONE);
+    }
+
+    TicketmasterEventProvider(RestClient restClient, EventsProperties properties, Clock clock, SharedStore shared) {
         this.restClient = restClient;
         this.properties = properties;
-        this.dailyCallLimiter = new DailyCallLimiter("ticketmaster", properties.maxCallsPerDay(), clock);
+        this.dailyCallLimiter = new DailyCallLimiter("ticketmaster", properties.maxCallsPerDay(), clock, shared);
     }
 
     @Override

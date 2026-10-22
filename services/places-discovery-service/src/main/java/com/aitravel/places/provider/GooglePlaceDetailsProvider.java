@@ -8,6 +8,7 @@ import com.aitravel.places.provider.GooglePlacesApi.PhotoMedia;
 import com.aitravel.places.provider.GooglePlacesApi.PlaceDetailsResponse;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -40,26 +41,37 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
     private static final String API_KEY_HEADER = "X-Goog-Api-Key";
     private static final String FIELD_MASK_HEADER = "X-Goog-FieldMask";
 
+    private static final String NO_PHOTO_PREFIX = "roam:nophoto:";
+    /** Places rarely gain a first photo, and a week keeps the remembered set small. */
+    static final Duration NO_PHOTO_TTL = Duration.ofDays(7);
+
     private final RestClient restClient;
     private final GooglePlacesProperties places;
     private final GooglePlaceDetailsProperties details;
     private final DailyCallLimiter dailyCallLimiter;
     private final DailyCallLimiter photoLimiter;
+    private final SharedStore shared;
 
     // Two constructors: Spring must be told which one to use.
     @Autowired
     public GooglePlaceDetailsProvider(RestClient googlePlacesRestClient, GooglePlacesProperties places,
-                                      GooglePlaceDetailsProperties details) {
-        this(googlePlacesRestClient, places, details, Clock.systemUTC());
+                                      GooglePlaceDetailsProperties details, SharedStore shared) {
+        this(googlePlacesRestClient, places, details, Clock.systemUTC(), shared);
     }
 
     GooglePlaceDetailsProvider(RestClient restClient, GooglePlacesProperties places,
                                GooglePlaceDetailsProperties details, Clock clock) {
+        this(restClient, places, details, clock, SharedStore.NONE);
+    }
+
+    GooglePlaceDetailsProvider(RestClient restClient, GooglePlacesProperties places,
+                               GooglePlaceDetailsProperties details, Clock clock, SharedStore shared) {
         this.restClient = restClient;
         this.places = places;
         this.details = details;
-        this.dailyCallLimiter = new DailyCallLimiter("google-place-details", details.maxCallsPerDay(), clock);
-        this.photoLimiter = new DailyCallLimiter("google-place-photos", details.photosMaxPerDay(), clock);
+        this.shared = shared;
+        this.dailyCallLimiter = new DailyCallLimiter("google-place-details", details.maxCallsPerDay(), clock, shared);
+        this.photoLimiter = new DailyCallLimiter("google-place-photos", details.photosMaxPerDay(), clock, shared);
     }
 
     @Override
@@ -82,9 +94,15 @@ public class GooglePlaceDetailsProvider implements PlaceDetailsProvider {
         if (photoLimiter.usedToday() >= photoLimiter.maxCallsPerDay()) {
             throw photoLimitReached();
         }
+        if (shared.get(NO_PHOTO_PREFIX + placeId).isPresent()) {
+            log.info("Place known to have no photo, skipping Google Place Details");
+            return Optional.empty();
+        }
         log.info("Calling Google Place Details for a card photo");
         PlaceDetailsResponse response = fetch(placeId, "photos");
         if (response == null || response.photos() == null || response.photos().isEmpty()) {
+            // Only the place ID is kept (which Google's terms allow), so the next card skips this paid lookup.
+            shared.put(NO_PHOTO_PREFIX + placeId, "1", NO_PHOTO_TTL);
             return Optional.empty();
         }
         if (!photoLimiter.tryAcquire()) {

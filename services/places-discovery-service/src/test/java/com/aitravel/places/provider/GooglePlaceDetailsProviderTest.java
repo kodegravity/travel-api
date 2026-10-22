@@ -189,6 +189,22 @@ class GooglePlaceDetailsProviderTest {
     }
 
     @Test
+    void aPlaceWithoutPhotosIsRememberedSoTheNextCardSkipsGoogle() {
+        server.expect(requestTo(DETAILS_URL)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        FakeSharedStore store = new FakeSharedStore();
+        var places = new GooglePlacesProperties(API_KEY, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(5), 20,
+                "places.id", 190);
+        var details = new GooglePlaceDetailsProperties(30, "id,displayName,reviews,photos", 1200, 5, 30, 640);
+        GooglePlaceDetailsProvider provider = new GooglePlaceDetailsProvider(builder.build(), places, details,
+                Clock.systemUTC(), store);
+
+        assertThat(provider.findPhoto(PLACE_ID)).isEmpty();
+        assertThat(provider.findPhoto(PLACE_ID)).isEmpty();
+        server.verify();
+        assertThat(store.ttls.get("roam:nophoto:" + PLACE_ID)).isEqualTo(GooglePlaceDetailsProvider.NO_PHOTO_TTL);
+    }
+
+    @Test
     void aPlaceWithoutPhotosUsesNoPhotoCall() {
         server.expect(requestTo(DETAILS_URL)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         GooglePlaceDetailsProvider provider = provider(30, 1);

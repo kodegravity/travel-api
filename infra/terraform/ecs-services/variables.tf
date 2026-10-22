@@ -116,9 +116,9 @@ variable "ai_enabled" {
 }
 
 variable "google_places_max_calls_per_day" {
-  description = "Hard cap on Google Places calls per UTC day per task. 190 keeps Google under $30/month."
+  description = "Hard cap on Google Places calls per UTC day, shared by all tasks when Redis is on. 180 keeps Google near $16/month, so the whole project stays under $100/month with Redis and Postgres."
   type        = number
-  default     = 190
+  default     = 180
 }
 
 variable "google_routes_max_calls_per_day" {
@@ -232,4 +232,22 @@ variable "openai_api_key_secret_name" {
   description = "Secrets Manager secret holding the OpenAI API key (see ../secrets)."
   type        = string
   default     = "ai-travel-app/openai-api-key"
+}
+
+variable "redis_enabled" {
+  description = "Share daily call caps and small caches through the Valkey cache (infra/terraform/cache)."
+  type        = bool
+  default     = false
+}
+
+variable "redis_host" {
+  description = "Valkey primary endpoint (cache module output endpoint_address). Used when redis_enabled."
+  type        = string
+  default     = ""
+}
+
+variable "redis_port" {
+  description = "Valkey primary endpoint port."
+  type        = number
+  default     = 6379
 }

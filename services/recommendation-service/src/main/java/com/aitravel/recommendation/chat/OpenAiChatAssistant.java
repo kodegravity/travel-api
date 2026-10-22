@@ -4,6 +4,7 @@ import com.aitravel.recommendation.config.TravelAiProperties;
 import com.aitravel.recommendation.exception.AiRecommendationException;
 import com.aitravel.recommendation.model.Interest;
 import com.aitravel.recommendation.service.DailyCallLimiter;
+import com.aitravel.recommendation.service.SharedStore;
 import com.aitravel.recommendation.service.SpringAIRecommendationService;
 import jakarta.annotation.PreDestroy;
 import java.math.RoundingMode;
@@ -69,14 +70,20 @@ public class OpenAiChatAssistant implements ChatAssistant {
     });
 
     @Autowired
-    public OpenAiChatAssistant(ChatClient chatClient, TravelAiProperties aiProperties, ChatProperties properties) {
-        this(chatClient, aiProperties, properties, Clock.systemUTC());
+    public OpenAiChatAssistant(ChatClient chatClient, TravelAiProperties aiProperties, ChatProperties properties,
+                               SharedStore shared) {
+        this(chatClient, aiProperties, properties, Clock.systemUTC(), shared);
     }
 
     OpenAiChatAssistant(ChatClient chatClient, TravelAiProperties aiProperties, ChatProperties properties, Clock clock) {
+        this(chatClient, aiProperties, properties, clock, SharedStore.NONE);
+    }
+
+    OpenAiChatAssistant(ChatClient chatClient, TravelAiProperties aiProperties, ChatProperties properties, Clock clock,
+                        SharedStore shared) {
         this.chatClient = chatClient;
         this.aiProperties = aiProperties;
-        this.dailyCallLimiter = new DailyCallLimiter("openai-chat", properties.aiMaxCallsPerDay(), clock);
+        this.dailyCallLimiter = new DailyCallLimiter("openai-chat", properties.aiMaxCallsPerDay(), clock, shared);
     }
 
     @PreDestroy

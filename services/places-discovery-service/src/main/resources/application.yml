@@ -3,6 +3,16 @@ spring:
     name: places-discovery-service
   lifecycle:
     timeout-per-shutdown-phase: 25s
+  data:
+    redis:
+      # ElastiCache Valkey in AWS (TLS); a plain local Redis otherwise. Only used when travel.redis.enabled=true.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      # Short, so a slow or missing Redis costs a request at most this long before falling back to local state.
+      connect-timeout: 1s
+      timeout: 500ms
   security:
     oauth2:
       resourceserver:
@@ -11,6 +21,9 @@ spring:
           issuer-uri: ${OKTA_ISSUER:}
 
 travel:
+  redis:
+    # Shares daily call caps across tasks and restarts, and caches small lookups. Off: each task counts on its own.
+    enabled: ${TRAVEL_REDIS_ENABLED:false}
   warmup:
     # Background warm-up after startup (Okta keys, first downstream connection).
     enabled: ${TRAVEL_WARMUP_ENABLED:true}
@@ -71,6 +84,10 @@ management:
       # Boot 4 lists the liveness/readiness probe groups in the root response; this service has no k8s probes.
       probes:
         enabled: false
+  health:
+    # Redis is optional (callers fall back to local state), so its outage must not fail the ECS health check.
+    redis:
+      enabled: false
 logging:
   level:
     com.aitravel: ${LOGGING_LEVEL_COM_AITRAVEL:INFO}

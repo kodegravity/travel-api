@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 class GooglePlacesConfigTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(GooglePlacesConfig.class, GooglePlacesAttractionProvider.class);
+            .withUserConfiguration(GooglePlacesConfig.class, SharedStoreConfig.class, GooglePlacesAttractionProvider.class);
 
     @Test
     void googleProviderFailsFastWhenApiKeyIsMissing() {

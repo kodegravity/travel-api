@@ -1,6 +1,7 @@
 package com.aitravel.recommendation.config;
 
 import com.aitravel.recommendation.service.DailyCallLimiter;
+import com.aitravel.recommendation.service.SharedStore;
 import java.time.Clock;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,7 +27,7 @@ public class AiConfig {
     }
 
     @Bean
-    DailyCallLimiter aiDailyCallLimiter(TravelAiProperties properties) {
-        return new DailyCallLimiter("openai", properties.maxCallsPerDay(), Clock.systemUTC());
+    DailyCallLimiter aiDailyCallLimiter(TravelAiProperties properties, SharedStore shared) {
+        return new DailyCallLimiter("openai", properties.maxCallsPerDay(), Clock.systemUTC(), shared);
     }
 }
