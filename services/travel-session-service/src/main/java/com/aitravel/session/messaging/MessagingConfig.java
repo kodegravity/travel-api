@@ -1,5 +1,7 @@
 package com.aitravel.session.messaging;
 
+import com.aitravel.session.push.PushNotifier;
+import com.aitravel.session.repository.TravelSessionRepository;
 import io.awspring.cloud.sqs.config.SqsMessageListenerContainerFactory;
 import io.awspring.cloud.sqs.listener.MessageListenerContainerRegistry;
 import io.awspring.cloud.sqs.listener.QueueNotFoundStrategy;
@@ -63,8 +65,9 @@ public class MessagingConfig {
     @Bean
     @ConditionalOnProperty(prefix = "travel.messaging", name = "enabled", havingValue = "true")
     NotificationEventListener notificationEventListener(JsonMapper mapper, ProcessedEventStore processed,
-                                                        MeterRegistry meters) {
-        return new NotificationEventListener(mapper, processed, meters);
+                                                        MeterRegistry meters, TravelSessionRepository sessions,
+                                                        PushNotifier push) {
+        return new NotificationEventListener(mapper, processed, meters, sessions, push);
     }
 
     /**

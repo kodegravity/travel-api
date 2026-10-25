@@ -15,6 +15,7 @@ import com.aitravel.session.dto.TravelSessionRecommendationResponse;
 import com.aitravel.session.exception.AttractionProviderException;
 import com.aitravel.session.exception.TravelSessionException.Reason;
 import com.aitravel.session.exception.TravelSessionException;
+import com.aitravel.session.feedback.PlaceExclusions;
 import com.aitravel.session.logging.LogIds;
 import com.aitravel.session.messaging.EventOutbox;
 import com.aitravel.session.messaging.EventType;
@@ -31,6 +32,7 @@ import com.aitravel.session.repository.TravelSessionRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -59,12 +61,22 @@ public class TravelSessionService {
     private final Clock clock;
     /** Events for SNS, written atomically with the session change that causes them. Does nothing while disabled. */
     private final EventOutbox outbox;
+    /** Places the traveler disliked, left out of every refresh like the places already suggested. */
+    private final PlaceExclusions exclusions;
 
     public TravelSessionService(TravelSessionRepository repository,
                                 RecommendationService recommendationService,
                                 TravelSessionProperties properties,
                                 Clock clock) {
-        this(repository, recommendationService, properties, clock, EventOutbox.disabled());
+        this(repository, recommendationService, properties, clock, EventOutbox.disabled(), PlaceExclusions.none());
+    }
+
+    public TravelSessionService(TravelSessionRepository repository,
+                                RecommendationService recommendationService,
+                                TravelSessionProperties properties,
+                                Clock clock,
+                                EventOutbox outbox) {
+        this(repository, recommendationService, properties, clock, outbox, PlaceExclusions.none());
     }
 
     @Autowired
@@ -72,12 +84,14 @@ public class TravelSessionService {
                                 RecommendationService recommendationService,
                                 TravelSessionProperties properties,
                                 Clock clock,
-                                EventOutbox outbox) {
+                                EventOutbox outbox,
+                                PlaceExclusions exclusions) {
         this.repository = repository;
         this.recommendationService = recommendationService;
         this.properties = properties;
         this.clock = clock;
         this.outbox = outbox;
+        this.exclusions = exclusions;
     }
 
     public CreateTravelSessionResponse create(CreateTravelSessionRequest request, String ownerSubject) {
@@ -145,11 +159,12 @@ public class TravelSessionService {
                     snapshot.maxBudget(),
                     snapshot.currencyCode(),
                     snapshot.availableMinutes());
-            log.info("Calling recommendation service sessionId={} excludedPlaces={}",
-                    sessionId, snapshot.recommendedPlaceIds().size());
+            Set<String> excluded = new HashSet<>(snapshot.recommendedPlaceIds());
+            excluded.addAll(exclusions.excludedPlaceIds(ownerSubject));
+            log.info("Calling recommendation service sessionId={} excludedPlaces={}", sessionId, excluded.size());
             RecommendationResponse result;
             try {
-                result = recommendationService.recommend(recommendationRequest, snapshot.recommendedPlaceIds());
+                result = recommendationService.recommend(recommendationRequest, excluded);
             } catch (AttractionProviderException ex) {
                 log.warn("Refresh failed sessionId={} reason=recommendation-service-unavailable, session state unchanged",
                         sessionId);

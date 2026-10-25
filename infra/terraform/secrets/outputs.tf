@@ -13,3 +13,7 @@ output "google_maps_browser_key_secret_name" {
 output "ticketmaster_api_key_secret_name" {
   value = aws_secretsmanager_secret.ticketmaster_api_key.name
 }
+
+output "vapid_private_key_parameter_arn" {
+  value = local.vapid_private_key_parameter_arn
+}

@@ -9,3 +9,9 @@ variable "execution_role_name" {
   type        = string
   default     = "ai-travel-app-ecs-execution"
 }
+
+variable "vapid_private_key_parameter" {
+  description = "SSM SecureString parameter holding the Web Push VAPID private key."
+  type        = string
+  default     = "/roam/push/vapid-private-key"
+}

@@ -7,6 +7,7 @@ import org.springframework.test.context.TestPropertySource;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasKey;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -17,9 +18,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.aitravel.session.dto.RecommendationDto;
 import com.aitravel.session.dto.RecommendationRequest;
 import com.aitravel.session.dto.RecommendationResponse;
+import com.aitravel.session.feedback.PlaceExclusions;
 import com.aitravel.session.service.RecommendationService;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -48,6 +51,20 @@ class RecommendationControllerTest {
 
     @MockitoBean
     private RecommendationService recommendationService;
+
+    @MockitoBean
+    private PlaceExclusions exclusions;
+
+    @Test
+    void dislikedPlacesAreLeftOutBeforeRanking() throws Exception {
+        given(exclusions.excludedPlaceIds(any())).willReturn(Set.of("colosseum"));
+        given(recommendationService.recommend(any(RecommendationRequest.class), any()))
+                .willReturn(new RecommendationResponse(List.of()));
+
+        postJson(VALID_REQUEST).andExpect(status().isOk());
+
+        verify(recommendationService).recommend(any(RecommendationRequest.class), eq(Set.of("colosseum")));
+    }
 
     @Test
     void validRequestReturnsOkWithRecommendations() throws Exception {

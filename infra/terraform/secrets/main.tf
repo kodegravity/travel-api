@@ -24,20 +24,36 @@ resource "aws_secretsmanager_secret" "google_maps_browser_key" {
   description = "Google Maps JavaScript API browser key for the web app (VITE_GOOGLE_MAPS_API_KEY)."
 }
 
+# Web Push VAPID private key: an SSM SecureString (free, unlike a Secrets Manager secret), also created out of band
+# so the value never enters state. See docs/WEB_PUSH.md for how it was generated.
+data "aws_caller_identity" "current" {}
+
+locals {
+  vapid_private_key_parameter_arn = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.vapid_private_key_parameter}"
+}
+
 resource "aws_iam_role_policy" "ecs_execution_read_secrets" {
   name = "read-ai-travel-app-api-keys"
   role = var.execution_role_name
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = ["secretsmanager:GetSecretValue"]
-      Resource = [
-        aws_secretsmanager_secret.openai_api_key.arn,
-        aws_secretsmanager_secret.google_places_api_key.arn,
-        aws_secretsmanager_secret.ticketmaster_api_key.arn,
-      ]
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          aws_secretsmanager_secret.openai_api_key.arn,
+          aws_secretsmanager_secret.google_places_api_key.arn,
+          aws_secretsmanager_secret.ticketmaster_api_key.arn,
+        ]
+      },
+      {
+        # SecureString with the AWS-managed aws/ssm key, so no kms:Decrypt grant is needed.
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameters"]
+        Resource = [local.vapid_private_key_parameter_arn]
+      },
+    ]
   })
 }

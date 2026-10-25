@@ -2,6 +2,8 @@ package com.aitravel.session.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.aitravel.session.profile.DynamoDbProfileStore;
+import com.aitravel.session.profile.ProfileStore;
 import com.aitravel.session.repository.DynamoDbTravelSessionRepository;
 import com.aitravel.session.repository.InMemoryTravelSessionRepository;
 import com.aitravel.session.repository.TravelSessionRepository;
@@ -42,9 +44,17 @@ class SessionStoreSelectionTest {
         @Autowired
         private TravelSessionRepository repository;
 
+        @Autowired
+        private ProfileStore profileStore;
+
         @Test
         void usesDynamoDbStore() {
             assertThat(repository).isInstanceOf(DynamoDbTravelSessionRepository.class);
+        }
+
+        @Test
+        void keepsProfilesInTheSameTableWhilePostgresIsOff() {
+            assertThat(profileStore).isInstanceOf(DynamoDbProfileStore.class);
         }
     }
 }

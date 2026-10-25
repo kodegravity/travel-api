@@ -3,7 +3,18 @@ package com.aitravel.session.messaging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.aitravel.session.model.Interest;
+import com.aitravel.session.model.TravelSession;
+import com.aitravel.session.push.PushMessage;
+import com.aitravel.session.repository.InMemoryTravelSessionRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -58,5 +69,38 @@ class NotificationEventListenerTest {
         store.release("notification", "e-9");
 
         assertThat(store.markProcessed("notification", "e-9")).isTrue();
+    }
+
+    @Test
+    void pushesNewPlacesAndLiveEventsToTheSessionOwner() {
+        InMemoryTravelSessionRepository sessions = new InMemoryTravelSessionRepository();
+        UUID sessionId = UUID.randomUUID();
+        Instant now = Instant.now();
+        sessions.addIfCapacity(new TravelSession(sessionId, "okta-owner", Set.of(Interest.FOOD), BigDecimal.TEN, "EUR",
+                60, now, Duration.ofMinutes(30), Duration.ofHours(2)), 10, now, Duration.ofMinutes(30), List.of());
+        List<String> owners = new ArrayList<>();
+        List<PushMessage> sent = new ArrayList<>();
+        NotificationEventListener pushing = new NotificationEventListener(JsonMapper.builder().build(),
+                new InMemoryProcessedEventStore(), meters, sessions, (subject, message) -> {
+                    owners.add(subject);
+                    sent.add(message);
+                    return 1;
+                });
+
+        pushing.onMessage("""
+                {"eventId": "e-10", "eventType": "RecommendationsReady", "eventVersion": 1,
+                 "payload": {"sessionId": "%s", "placeIds": ["a", "b"], "source": "refresh"}}
+                """.formatted(sessionId));
+        pushing.onMessage("""
+                {"eventId": "e-11", "eventType": "NearbyEventDiscovered", "eventVersion": 1,
+                 "payload": {"sessionId": "%s", "events": [{"eventId": "G1", "name": "Derby", "venueName": "Arena",
+                             "headline": "Derby tonight"}]}}
+                """.formatted(sessionId));
+        pushing.onMessage(EVENT.replace("e-1", "e-12"));
+
+        assertThat(owners).containsOnly("okta-owner");
+        assertThat(sent).containsExactly(
+                new PushMessage("2 new places nearby", "Open ROAM to see them.", "travel-session-updates", "/travel-mode"),
+                new PushMessage("Derby tonight", "Derby at Arena", "live-event-G1", "/travel-mode"));
     }
 }

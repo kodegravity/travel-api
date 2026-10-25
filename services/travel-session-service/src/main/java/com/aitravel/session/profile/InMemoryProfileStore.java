@@ -3,12 +3,14 @@ package com.aitravel.session.profile;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Repository;
 
-/** Process-local profile store, the default ({@code travel.postgres.enabled=false}). Lost on restart. */
+/**
+ * Process-local profile store, the default (Postgres off and {@code travel.session.store=memory}). Lost on restart.
+ */
 @Repository
-@ConditionalOnProperty(prefix = "travel.postgres", name = "enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnExpression("!${travel.postgres.enabled:false} and '${travel.session.store:memory}' != 'dynamodb'")
 public class InMemoryProfileStore implements ProfileStore {
 
     private final Map<String, TravelerProfile> profiles = new ConcurrentHashMap<>();

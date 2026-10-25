@@ -1,6 +1,9 @@
 package com.aitravel.session.exception;
 
+import com.aitravel.session.feedback.FeedbackUnavailableException;
 import com.aitravel.session.plan.TravelPlanException;
+import com.aitravel.session.push.InvalidSubscriptionException;
+import com.aitravel.session.push.PushUnavailableException;
 import com.aitravel.session.profile.ProfileUnavailableException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -110,6 +113,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 HttpStatus.SERVICE_UNAVAILABLE, "Your profile is temporarily unavailable. Please try again later.");
         problem.setTitle("Profile unavailable");
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
+    @ExceptionHandler(FeedbackUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleFeedbackUnavailable(FeedbackUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE, "Your feedback could not be saved. Please try again.");
+        problem.setTitle("Feedback unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
+    @ExceptionHandler(PushUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handlePushUnavailable(PushUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE, "Push notifications are not available right now.");
+        problem.setTitle("Push unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
+    // The message names the field only; it never echoes the submitted endpoint or keys.
+    @ExceptionHandler(InvalidSubscriptionException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidSubscription(InvalidSubscriptionException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Invalid push subscription");
+        return ResponseEntity.badRequest().body(problem);
     }
 
     // Only the parameter name is echoed, never the submitted value.

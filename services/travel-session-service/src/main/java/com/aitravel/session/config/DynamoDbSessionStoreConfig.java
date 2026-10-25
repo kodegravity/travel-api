@@ -1,10 +1,16 @@
 package com.aitravel.session.config;
 
+import com.aitravel.session.feedback.DynamoDbFeedbackStore;
+import com.aitravel.session.feedback.FeedbackStore;
 import com.aitravel.session.messaging.DynamoDbProcessedEventStore;
 import com.aitravel.session.messaging.MessagingProperties;
 import com.aitravel.session.messaging.ProcessedEventStore;
 import com.aitravel.session.plan.DynamoDbTravelPlanStore;
 import com.aitravel.session.plan.TravelPlanStore;
+import com.aitravel.session.profile.DynamoDbProfileStore;
+import com.aitravel.session.profile.ProfileStore;
+import com.aitravel.session.push.DynamoDbPushSubscriptionStore;
+import com.aitravel.session.push.PushSubscriptionStore;
 import com.aitravel.session.repository.DynamoDbTravelSessionRepository;
 import com.aitravel.session.repository.TravelSessionRepository;
 import java.net.URI;
@@ -55,6 +61,26 @@ public class DynamoDbSessionStoreConfig {
     TravelPlanStore dynamoDbTravelPlanStore(DynamoDbClient travelSessionDynamoDbClient,
                                             DynamoDbSessionProperties properties, Clock clock) {
         return new DynamoDbTravelPlanStore(travelSessionDynamoDbClient, properties.tableName(), clock);
+    }
+
+    @Bean
+    FeedbackStore dynamoDbFeedbackStore(DynamoDbClient travelSessionDynamoDbClient,
+                                        DynamoDbSessionProperties properties, Clock clock) {
+        return new DynamoDbFeedbackStore(travelSessionDynamoDbClient, properties.tableName(), clock);
+    }
+
+    @Bean
+    PushSubscriptionStore dynamoDbPushSubscriptionStore(DynamoDbClient travelSessionDynamoDbClient,
+                                                        DynamoDbSessionProperties properties, Clock clock) {
+        return new DynamoDbPushSubscriptionStore(travelSessionDynamoDbClient, properties.tableName(), clock);
+    }
+
+    /** Profiles in the same table, unless Postgres holds them ({@code travel.postgres.enabled=true}). */
+    @Bean
+    @ConditionalOnProperty(prefix = "travel.postgres", name = "enabled", havingValue = "false", matchIfMissing = true)
+    ProfileStore dynamoDbProfileStore(DynamoDbClient travelSessionDynamoDbClient,
+                                      DynamoDbSessionProperties properties) {
+        return new DynamoDbProfileStore(travelSessionDynamoDbClient, properties.tableName());
     }
 
     /** Duplicate detection for SQS consumers, shared by every task, in the same table. */

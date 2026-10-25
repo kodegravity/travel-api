@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -22,6 +23,8 @@ import com.aitravel.session.dto.TravelSessionRecommendationResponse;
 import com.aitravel.session.exception.AttractionProviderException;
 import com.aitravel.session.exception.TravelSessionException;
 import com.aitravel.session.exception.TravelSessionException.Reason;
+import com.aitravel.session.feedback.PlaceExclusions;
+import com.aitravel.session.messaging.EventOutbox;
 import com.aitravel.session.model.Interest;
 import com.aitravel.session.model.TravelSession;
 import com.aitravel.session.model.TravelSessionStatus;
@@ -429,5 +432,18 @@ class TravelSessionServiceTest {
         assertReason(() -> service.refresh(id, OTHER_OWNER, at(LAT)), Reason.NOT_FOUND);
         assertReason(() -> service.stop(id, OTHER_OWNER), Reason.NOT_FOUND);
         assertThat(service.refresh(id, OWNER, at(LAT)).refreshStatus()).isEqualTo(RefreshStatus.UPDATED);
+    }
+
+    @Test
+    void refreshLeavesOutPlacesTheTravelerDisliked() {
+        PlaceExclusions disliked = subject -> subject.equals(OWNER) ? Set.of("tourist-trap") : Set.of();
+        service = new TravelSessionService(repository, recommendationService, properties, clock,
+                EventOutbox.disabled(), disliked);
+        providerReturns(places("a"));
+        UUID sessionId = createSession();
+
+        service.refresh(sessionId, OWNER, at(LAT));
+
+        verify(recommendationService).recommend(any(RecommendationRequest.class), eq(Set.of("tourist-trap")));
     }
 }
