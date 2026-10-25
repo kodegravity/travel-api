@@ -6,14 +6,30 @@ The backend is three independent Spring Boot services. Each has its own `pom.xml
 
 | Service | Port | Endpoints | Role |
 |---|---|---|---|
-| `services/travel-session-service` | 8080 | `/api/v1/recommendations`, `/api/v1/travel-sessions/**` (public) | Okta-protected public API, Active Travel Mode sessions, CORS |
-| `services/recommendation-service` | 8081 | `/internal/v1/recommendations` | Eligibility filters, deterministic ranking, optional OpenAI selection |
-| `services/places-discovery-service` | 8082 | `/internal/v1/places/search` | Attraction discovery: mock (Rome) or Google Places (New) |
+| `services/travel-session-service` | 8080 | the public API below | Okta-protected public API, Active Travel Mode sessions, account data, Web Push, CORS |
+| `services/recommendation-service` | 8081 | `/internal/v1/recommendations`, chat, live alerts | Eligibility filters, deterministic ranking, optional OpenAI selection, "Ask ROAM" |
+| `services/places-discovery-service` | 8082 | `/internal/v1/places/**`, routes, events | Places: mock (Rome) or Google Places (New); Google Routes; Ticketmaster events |
 
 ```
-Browser (Okta PKCE) -> travel-session -> recommendation -> places-discovery -> Google Places
-                                              \-> OpenAI (optional)
+Browser (Okta PKCE) -> API Gateway -> travel-session -> recommendation -> places-discovery -> Google / Ticketmaster
+                                         |                  \-> OpenAI (capped)
+                                         +-> DynamoDB (sessions, plans, profiles, feedback, push subscriptions)
+                                         +-> SNS/SQS events -> Web Push to the traveler's browsers
 ```
+
+Public endpoints (all need an Okta access token):
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/v1/recommendations` | One search: ranked places for a location, interests, budget, and time |
+| `POST/DELETE /api/v1/travel-sessions/**` | Active Travel Mode sessions (see below) |
+| `GET /api/v1/places/{id}`, `GET /api/v1/places/{id}/photo` | Place details and a card photo |
+| `POST /api/v1/routes/optimize` | Visiting order for a trip, with street travel times |
+| `POST /api/v1/chat` | "Ask ROAM" reply with weather-aware suggestions |
+| `GET/PUT /api/v1/travel-plan` | Trips, favorites, and itineraries synced across devices |
+| `GET/PUT /api/v1/profile` | Display name, home city, default interests, currency, travel mode |
+| `GET /api/v1/feedback`, `PUT/DELETE /api/v1/feedback/{placeId}` | Likes and dislikes; disliked places are left out of later searches |
+| `GET /api/v1/push/config`, `PUT /api/v1/push/subscription`, `POST /api/v1/push/unsubscribe`, `POST /api/v1/push/test` | Web Push subscriptions ([docs/WEB_PUSH.md](docs/WEB_PUSH.md)) |
 
 Calls between services use `RestClient` and forward the caller's validated Okta token and `X-Request-Id`.
 
@@ -28,6 +44,13 @@ From any service directory:
 ```bash
 ./mvnw clean verify      # build and run the tests (no paid API calls)
 OKTA_ISSUER=https://<domain>.okta.com/oauth2/default OKTA_AUDIENCE=api://default ./mvnw spring-boot:run
+```
+
+Or the whole backend with Docker Compose (mock providers, DynamoDB Local, Valkey; nothing paid):
+
+```bash
+cp .env.example .env     # set OKTA_ISSUER and OKTA_AUDIENCE
+docker compose up --build
 ```
 
 `OKTA_ISSUER` and `OKTA_AUDIENCE` are required by every service. Start places-discovery, then recommendation, then travel-session. Default base URLs point at `localhost:8082` and `localhost:8081`. See [docs/OKTA_LOCAL_SETUP.md](docs/OKTA_LOCAL_SETUP.md) and [docs/POSTMAN_TESTING.md](docs/POSTMAN_TESTING.md).
@@ -46,22 +69,27 @@ OKTA_ISSUER=https://<domain>.okta.com/oauth2/default OKTA_AUDIENCE=api://default
 | AI model | recommendation | `TRAVEL_AI_MODEL` | `gpt-4o-mini` |
 | Session store | travel-session | `TRAVEL_SESSION_STORE` (`memory` or `dynamodb`), `TRAVEL_SESSION_TABLE` | `memory`, `roam-travel-sessions` |
 | Attraction provider | places-discovery | `ATTRACTION_PROVIDER` (`mock` or `google`, needs `GOOGLE_PLACES_API_KEY`) | `mock` |
+| Events provider | places-discovery | `EVENTS_PROVIDER` (`mock` or `ticketmaster`, needs `TICKETMASTER_API_KEY`) | `mock` |
+| Shared caps and caches | places-discovery, recommendation | `TRAVEL_REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_SSL` | off |
+| Event messaging | travel-session, recommendation | `TRAVEL_MESSAGING_ENABLED`, `TRAVEL_MESSAGING_TOPIC_ARN` ([docs/messaging.md](docs/messaging.md)) | off |
+| Profiles in Postgres instead of DynamoDB | travel-session | `TRAVEL_POSTGRES_ENABLED`, `TRAVEL_POSTGRES_URL`, `TRAVEL_POSTGRES_SECRET_ID` | off |
+| Web Push | travel-session | `TRAVEL_PUSH_ENABLED`, `TRAVEL_PUSH_VAPID_PUBLIC_KEY`, `TRAVEL_PUSH_VAPID_PRIVATE_KEY`, `TRAVEL_PUSH_SUBJECT` | off |
 
 Secrets are supplied through environment variables (Secrets Manager on ECS) and are never logged or committed.
 
 ## Cost Controls
 
-Paid APIs are off by default. When enabled, each one has a hard daily cap per running task, counted per UTC day:
+Paid APIs are off by default. When enabled, each one has a hard daily cap, counted per UTC day:
 
 | Control | Env var | Default | When exceeded |
 |---|---|---|---|
 | OpenAI calls per day | `TRAVEL_AI_MAX_CALLS_PER_DAY` | `300` | Falls back to deterministic ranking (users still get results) |
 | OpenAI output tokens per call | `TRAVEL_AI_MAX_TOKENS` | `500` | Response is cut off at the cap |
-| Google Places calls per day | `GOOGLE_PLACES_MAX_CALLS_PER_DAY` | `190` | Search returns 503 |
+| Google Places calls per day | `GOOGLE_PLACES_MAX_CALLS_PER_DAY` | `180` | Search returns 503 |
 
-Budget: $100/month total (AWS + Google + OpenAI), at most $30/month each for Google and OpenAI. 190 Google calls/day stays within the 5,000 free monthly calls plus about $28 ($32 per 1,000 after that). 300 OpenAI calls/day with gpt-4o-mini is about $5/month at most.
+Budget: $100/month total (AWS + Google + OpenAI), at most $30/month each for Google and OpenAI. 180 Google calls/day stays within the 5,000 free monthly calls plus about $16 ($32 per 1,000 after that). 300 OpenAI calls/day with gpt-4o-mini is about $5/month at most. Place Details, Photos, Routes, chat, and live alerts have their own caps (see `infra/terraform/ecs-services/variables.tf`).
 
-The caps are per process and reset when a task restarts, so with N tasks the effective limit is N times the value. Provider-side limits are the hard guarantee. Also set provider-side limits: a daily quota on the Places API in Google Cloud, plus a budget alert, and a prepaid balance with auto-recharge off in OpenAI.
+With `TRAVEL_REDIS_ENABLED=true` (live on AWS) each cap is one counter per day shared by all tasks and kept across restarts. Without Redis, or while it is unreachable, each task counts on its own and a restart resets its count. Provider-side limits are the hard guarantee. Also set provider-side limits: a daily quota on the Places API in Google Cloud, plus a budget alert, and a prepaid balance with auto-recharge off in OpenAI.
 
 The AI engine also falls back to ranking when OpenAI errors or selects nothing usable, so an AI outage never hides eligible attractions.
 
@@ -179,6 +207,14 @@ curl -i -X POST http://localhost:8080/api/v1/recommendations \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"location":'
 ```
 
+## Account data: profile, feedback, push
+
+These live in the sessions table (`TRAVEL_SESSION_STORE=dynamodb`), one item per traveler, keyed by a SHA-256 of the Okta subject (`profile#`, `feedback#`, `push#`, next to `plan#`). Items have no `status`, so the session capacity scan ignores them, and each carries a `purgeAt` a year after its last change for the table's TTL. No email, raw Okta subject, or credentials are stored; identity stays in Okta.
+
+- **Profile** (`/api/v1/profile`): the first `GET` registers the traveler. The web app fills Travel Mode's interests and currency from it. Setting `TRAVEL_POSTGRES_ENABLED=true` moves profiles to PostgreSQL (`infra/terraform/database`, not deployed).
+- **Feedback** (`/api/v1/feedback`): `PUT /api/v1/feedback/{placeId}` with `{"rating": "LIKE" | "DISLIKE", "name", "category", "cityId"}`. The newest 300 ratings are kept. Disliked places are excluded before ranking in `POST /api/v1/recommendations` and in every Travel Mode refresh, so the results fill with other places. If feedback can't be read, searches run without exclusions.
+- **Web Push** (`/api/v1/push/**`): see [docs/WEB_PUSH.md](docs/WEB_PUSH.md).
+
 ## Git Notes
 
 `target/`, IDE files (`.idea/`, `*.iml`), and local secret files (`.env`, `application-local.yml`) are ignored via `.gitignore`.
@@ -289,7 +325,7 @@ Refresh runs only when both movement ≥ 250 m **and** elapsed time ≥ 5 min si
 
 ### Duplicate prevention
 
-Each session stores the IDs of attractions it has already recommended. Those IDs are excluded before ranking and the result limit, so the pipeline can select the next eligible candidates. When every eligible attraction has been shown, the response is `NO_NEW_RESULTS`. Refresh responses are not paged, because every returned place is marked as seen. Public `POST /api/v1/recommendations` never excludes anything.
+Each session stores the IDs of attractions it has already recommended. Those IDs are excluded before ranking and the result limit, so the pipeline can select the next eligible candidates. When every eligible attraction has been shown, the response is `NO_NEW_RESULTS`. Refresh responses are not paged, because every returned place is marked as seen. Public `POST /api/v1/recommendations` excludes only the places the traveler disliked.
 
 ### Error responses
 
@@ -310,6 +346,8 @@ All errors use RFC 9457 `application/problem+json`.
 | Recommendation provider unavailable | 503 |
 
 Responses never include stack traces, API keys, or coordinates.
+
+Places the traveler marked "Not for me" (`/api/v1/feedback`) are excluded along with the places the session already showed.
 
 ### Session store
 
