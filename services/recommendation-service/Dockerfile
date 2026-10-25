@@ -41,6 +41,10 @@ RUN apk upgrade --no-cache libexpat
 RUN addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app
 
+# ECS runs the container with a read-only root filesystem. /tmp (JVM perf data, Tomcat work files) is the only
+# writable path: declaring it a volume makes ECS mount an empty one with the image's 1777 permissions.
+VOLUME ["/tmp"]
+
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /workspace/app.jar /app/app.jar
 

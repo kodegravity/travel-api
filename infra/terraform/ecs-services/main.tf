@@ -30,6 +30,11 @@ resource "aws_ecs_task_definition" "places_discovery" {
   memory                   = "512"
   execution_role_arn       = var.execution_role_arn
 
+  # Empty, task-scoped scratch space mounted at /tmp.
+  volume {
+    name = "tmp"
+  }
+
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
@@ -67,10 +72,12 @@ resource "aws_ecs_task_definition" "places_discovery" {
           { name = "TICKETMASTER_API_KEY", valueFrom = "${data.aws_secretsmanager_secret.ticketmaster_api_key.arn}:${var.ticketmaster_api_key_json_key}::" },
         ] : [],
       )
-      stopTimeout    = 30
-      mountPoints    = []
-      volumesFrom    = []
-      systemControls = []
+      stopTimeout = 30
+      # Read-only root filesystem; /tmp is the only writable path (a task volume, see the image's VOLUME).
+      readonlyRootFilesystem = true
+      mountPoints            = [{ sourceVolume = "tmp", containerPath = "/tmp", readOnly = false }]
+      volumesFrom            = []
+      systemControls         = []
       healthCheck = {
         command  = ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8082/actuator/health || exit 1"]
         interval = 30
@@ -100,6 +107,11 @@ resource "aws_ecs_task_definition" "recommendation" {
   execution_role_arn       = var.execution_role_arn
   # Set once the messaging module exists: lets recommendation consume its SQS queue.
   task_role_arn = var.recommendation_task_role_arn == "" ? null : var.recommendation_task_role_arn
+
+  # Empty, task-scoped scratch space mounted at /tmp.
+  volume {
+    name = "tmp"
+  }
 
   runtime_platform {
     cpu_architecture        = "X86_64"
@@ -135,10 +147,12 @@ resource "aws_ecs_task_definition" "recommendation" {
       secrets = var.ai_enabled ? [
         { name = "OPENAI_API_KEY", valueFrom = data.aws_secretsmanager_secret.openai_api_key.arn },
       ] : []
-      stopTimeout    = 30
-      mountPoints    = []
-      volumesFrom    = []
-      systemControls = []
+      stopTimeout = 30
+      # Read-only root filesystem; /tmp is the only writable path (a task volume, see the image's VOLUME).
+      readonlyRootFilesystem = true
+      mountPoints            = [{ sourceVolume = "tmp", containerPath = "/tmp", readOnly = false }]
+      volumesFrom            = []
+      systemControls         = []
       healthCheck = {
         command     = ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/actuator/health || exit 1"]
         interval    = 30
@@ -167,6 +181,11 @@ resource "aws_ecs_task_definition" "travel_session" {
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = var.travel_session_task_role_arn
 
+  # Empty, task-scoped scratch space mounted at /tmp.
+  volume {
+    name = "tmp"
+  }
+
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
@@ -191,13 +210,22 @@ resource "aws_ecs_task_definition" "travel_session" {
         { name = "TRAVEL_POSTGRES_ENABLED", value = tostring(var.postgres_enabled) },
         { name = "TRAVEL_POSTGRES_URL", value = var.postgres_url },
         { name = "TRAVEL_POSTGRES_SECRET_ID", value = var.postgres_secret_arn },
+        { name = "TRAVEL_PUSH_ENABLED", value = tostring(var.push_enabled) },
+        { name = "TRAVEL_PUSH_VAPID_PUBLIC_KEY", value = var.push_vapid_public_key },
+        { name = "TRAVEL_PUSH_SUBJECT", value = var.push_subject },
         { name = "LOGGING_STRUCTURED_FORMAT_CONSOLE", value = "ecs" },
         { name = "LOGGING_LEVEL_COM_AITRAVEL", value = "INFO" },
       ], local.okta_env)
-      stopTimeout    = 30
-      mountPoints    = []
-      volumesFrom    = []
-      systemControls = []
+      # The VAPID private key, injected only while push is on.
+      secrets = var.push_enabled ? [
+        { name = "TRAVEL_PUSH_VAPID_PRIVATE_KEY", valueFrom = var.push_vapid_private_key_parameter_arn },
+      ] : []
+      stopTimeout = 30
+      # ECS Exec needs a writable root filesystem, so the root is read-only only while Exec is off.
+      readonlyRootFilesystem = !var.enable_execute_command
+      mountPoints            = [{ sourceVolume = "tmp", containerPath = "/tmp", readOnly = false }]
+      volumesFrom            = []
+      systemControls         = []
       healthCheck = {
         command     = ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health || exit 1"]
         interval    = 30
@@ -285,7 +313,7 @@ resource "aws_ecs_service" "travel_session" {
   task_definition               = "${aws_ecs_task_definition.travel_session.family}:${aws_ecs_task_definition.travel_session.revision}"
   desired_count                 = var.desired_count
   launch_type                   = "FARGATE"
-  enable_execute_command        = true
+  enable_execute_command        = var.enable_execute_command
   availability_zone_rebalancing = "ENABLED"
 
   network_configuration {

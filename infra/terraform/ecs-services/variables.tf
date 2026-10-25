@@ -269,3 +269,33 @@ variable "postgres_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "enable_execute_command" {
+  description = "ECS Exec into travel-session (debugging). Needs a writable root filesystem, so turning it on drops readonlyRootFilesystem for that container."
+  type        = bool
+  default     = false
+}
+
+variable "push_enabled" {
+  description = "Web Push from travel-session. Needs the VAPID key pair (docs/WEB_PUSH.md)."
+  type        = bool
+  default     = false
+}
+
+variable "push_vapid_public_key" {
+  description = "Web Push VAPID public key, base64url. Not secret."
+  type        = string
+  default     = ""
+}
+
+variable "push_vapid_private_key_parameter_arn" {
+  description = "ARN of the SSM SecureString holding the VAPID private key (output of ../secrets)."
+  type        = string
+  default     = ""
+}
+
+variable "push_subject" {
+  description = "VAPID contact (mailto: or https:) push services can use to reach the operator."
+  type        = string
+  default     = "mailto:admin@localhost"
+}

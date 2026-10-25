@@ -299,7 +299,8 @@ jobs:
       id-token: write
     env:
       AWS_REGION: us-east-2
-      AWS_ROLE_ARN: arn:aws:iam::512383926725:role/ai-travel-companion-ecr-push
+      # Repository variable, so the account ID is not in the workflow (like TF_AWS_ROLE_ARN in terraform.yml).
+      AWS_ROLE_ARN: ${{ vars.ECR_PUSH_ROLE_ARN }}
       ECR_REPOSITORY: ${{ matrix.ecr_repository }}
     steps:
       - name: Download scanned image
